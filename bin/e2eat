@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Thin wrapper so agents and the orchestrator can call ./bin/e2eat from the project root.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export E2EAT_HOME="$ROOT"
+exec uv run --quiet --project "$ROOT/tools" e2eat "$@"
