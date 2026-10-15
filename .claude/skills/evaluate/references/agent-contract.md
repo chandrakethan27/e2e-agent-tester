@@ -55,6 +55,7 @@ Never change `status` yourself.
 - Never run the evaluated project's code, package managers, or build tools on the host. Use containers only: `./bin/e2eat sandbox …`, `docker exec`, or `docker run --label e2eat.run=<run-id> …`.
 - Send traffic only to `127.0.0.1`/`localhost` or containers on the run network. Never probe third-party hosts.
 - Active security checks use harmless proofs (read-only queries, marker strings). No destructive payloads.
+- Run git on the evaluated code only as `GIT_CEILING_DIRECTORIES=$RUN_DIR git -C $RUN_DIR/repo …`, and only when `$RUN_DIR/repo/.git` exists. `runs/` sits inside this tool's own git repo, so without the ceiling git would silently report the tool's history.
 - Never print or copy secret values. `$RUN_DIR/.secrets.env` exists only for `--env-file`.
 - Stay within BUDGETS. If you run out of time, write what you have.
 

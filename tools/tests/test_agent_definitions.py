@@ -46,3 +46,12 @@ def test_contract_documents_the_finding_format():
     contract = (ROOT / ".claude/skills/evaluate/references/agent-contract.md").read_text()
     for word in ("next-id", "evidence", "confidence", "rebuttal", "conceded", "Never run the evaluated project"):
         assert word in contract
+
+
+@pytest.mark.parametrize("path", sorted(AGENTS_DIR.glob("*.md")) + [ROOT / ".claude/skills/evaluate/references/agent-contract.md"])
+def test_git_on_repo_is_fenced_to_the_run(path):
+    # runs/ lives inside this tool's own git repo, so a plain `git -C $RUN_DIR/repo` on a source
+    # without .git silently reports the tool's history instead of the evaluated project's.
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if "git -C $RUN_DIR/repo" in line:
+            assert "GIT_CEILING_DIRECTORIES=$RUN_DIR" in line, f"{path.name}: {line.strip()}"
