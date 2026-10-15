@@ -1,0 +1,67 @@
+# Evaluation: {{ run.source.raw }}
+
+- Run `{{ run.run_id }}` · profile **{{ run.profile }}** · depth **{{ run.depth }}**
+- Project type: {{ recon.project_type or "unknown" }} · runtime: **{{ runtime.status or "unknown" }}**
+- **Verdict: {{ scores.verdict or "Not scored" }}** · overall {{ scores.overall if scores.overall is number else "—" }}/100 · coverage {{ scores.coverage_pct if scores.coverage_pct is number else "—" }}%
+{% for gate in scores.gates %}
+- Gate: {{ gate }}
+{% endfor %}
+
+{% if report.executive_summary %}
+## Executive summary
+
+{{ report.executive_summary }}
+
+{% endif %}
+## Scores
+
+| Dimension | Score | Weight |
+|---|---|---|
+{% for dim in dimensions %}
+{% set d = scores.dimensions[dim] %}
+| {{ dim }} | {{ d.score if d.score is number else "N/A" }} | {{ ((d.weight or 0) * 100) | round | int }}% |
+{% endfor %}
+
+## Findings ({{ findings | length }} confirmed, {{ dropped_count }} dropped)
+
+{% for f in findings %}
+### [{{ f.severity | upper }}] {{ f.title }} ({{ f.id }})
+
+{{ f.claim }}
+
+{% if f.repro %}
+```text
+{{ f.repro }}
+```
+
+{% endif %}
+Evidence: {% for ref in f.evidence %}`{{ ref }}`{% if not loop.last %}, {% endif %}{% endfor %}
+
+
+{% else %}
+No confirmed findings.
+
+{% endfor %}
+{% if usecases.use_cases %}
+## Where this fits
+
+{% for u in usecases.use_cases %}
+- **{{ u.title }}** ({{ u.fit }} fit) — {{ u.scenario }} _Why:_ {{ u.why }}
+{% endfor %}
+
+{% endif %}
+{% if usecases.anti_use_cases %}
+## Where not to use it
+
+{% for a in usecases.anti_use_cases %}
+- **{{ a.title }}** — {{ a.why }}
+{% endfor %}
+
+{% endif %}
+{% if report.next_steps %}
+## Next steps
+
+{% for s in report.next_steps %}
+{{ loop.index }}. {{ s }}
+{% endfor %}
+{% endif %}

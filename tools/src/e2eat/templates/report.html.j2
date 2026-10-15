@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ run.run_id }} · Evaluation report</title>
+<style>
+:root{
+  --bg:#f6f5f1;--surface:#ffffff;--surface-2:#f0efe9;--text:#1c1b18;--muted:#68665e;--border:#e2e0d8;
+  --accent:#3155c4;--good:#0b7a46;--ok:#3155c4;--warn:#a85b00;--bad:#b3261e;--neutral:#68665e;
+  --sev-critical:#b3261e;--sev-high:#c2410c;--sev-medium:#a85b00;--sev-low:#4b5563;--sev-info:#6b7280;
+  --bar:#dcdad2;color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#131311;--surface:#1c1c19;--surface-2:#24241f;--text:#ecebe5;--muted:#a3a197;--border:#34332d;
+  --accent:#8fa8ff;--good:#5dd39e;--ok:#8fa8ff;--warn:#f5b454;--bad:#ff8a80;--neutral:#a3a197;
+  --sev-critical:#ff8a80;--sev-high:#ffa66b;--sev-medium:#f5b454;--sev-low:#b4bcc8;--sev-info:#9aa3af;
+  --bar:#3a3933;color-scheme:dark;
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:960px;margin:0 auto;padding:32px 16px 72px}
+h1{font-size:1.6rem;line-height:1.25;margin:0 0 4px;overflow-wrap:anywhere}
+h2{font-size:1.15rem;margin:40px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+h3{font-size:1rem;margin:0 0 6px}
+p{margin:0 0 10px}
+a{color:var(--accent);overflow-wrap:anywhere}
+code{font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--surface-2);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+pre{background:var(--surface-2);padding:10px 12px;border-radius:8px;overflow-x:auto;font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;margin:8px 0}
+.meta{color:var(--muted);font-size:.9rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.verdict{display:grid;grid-template-columns:auto 1fr;gap:16px 24px;align-items:center;margin-top:20px}
+.badge{display:inline-block;padding:6px 14px;border-radius:999px;font-weight:650;font-size:1.05rem;color:var(--surface);background:var(--neutral)}
+.tone-good{background:var(--good)}.tone-ok{background:var(--ok)}.tone-warn{background:var(--warn)}.tone-bad{background:var(--bad)}
+.kpis{display:flex;flex-wrap:wrap;gap:8px 28px}
+.kpi b{display:block;font-size:1.5rem;line-height:1.2;font-variant-numeric:tabular-nums}
+.kpi span{color:var(--muted);font-size:.85rem}
+.gates{grid-column:1/-1;margin:0;padding-left:18px;color:var(--bad)}
+.dims{display:grid;gap:10px}
+.dim{display:grid;grid-template-columns:150px 1fr 56px;gap:12px;align-items:center}
+.track{height:10px;background:var(--bar);border-radius:999px;overflow:hidden}
+.fill{height:100%;background:var(--accent);border-radius:999px}
+.na{color:var(--muted);font-size:.85rem}
+.score{text-align:right;font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+ul.clean{margin:0;padding-left:18px}
+details.finding{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--sev-info);border-radius:10px;margin:8px 0;padding:10px 14px}
+details.finding summary{cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+details.finding summary::-webkit-details-marker{display:none}
+details.finding[open] summary{margin-bottom:8px}
+.sev{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.sev-critical{border-left-color:var(--sev-critical)}.sev-critical .sev{color:var(--sev-critical)}
+.sev-high{border-left-color:var(--sev-high)}.sev-high .sev{color:var(--sev-high)}
+.sev-medium{border-left-color:var(--sev-medium)}.sev-medium .sev{color:var(--sev-medium)}
+.sev-low{border-left-color:var(--sev-low)}.sev-low .sev{color:var(--sev-low)}
+.sev-info .sev{color:var(--sev-info)}
+.fid{color:var(--muted);font-size:.8rem}
+.evidence img{max-width:100%;border:1px solid var(--border);border-radius:8px;margin-top:6px}
+.fit{font-size:.75rem;font-weight:700;text-transform:uppercase;color:var(--muted)}
+.table-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--muted);font-weight:600}
+footer{margin-top:48px;color:var(--muted);font-size:.85rem}
+@media (max-width:560px){.verdict{grid-template-columns:1fr}.dim{grid-template-columns:110px 1fr 44px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <p class="meta">End-to-end evaluation · profile <b>{{ run.profile }}</b> · depth <b>{{ run.depth }}</b></p>
+  <h1>{{ run.source.raw }}</h1>
+  <p class="meta">Run <code>{{ run.run_id }}</code> · {{ recon.project_type or "unknown type" }}{% if recon.languages %} · {{ recon.languages | join(", ") }}{% endif %} · runtime <b>{{ runtime.status or "unknown" }}</b></p>
+  {% if recon.summary %}<p>{{ recon.summary }}</p>{% endif %}
+</header>
+
+<section class="card verdict">
+  <span class="badge tone-{{ scores.verdict | tone }}">{{ scores.verdict or "Not scored" }}</span>
+  <div class="kpis">
+    <div class="kpi"><b>{{ scores.overall if scores.overall is number else "—" }}</b><span>overall / 100</span></div>
+    <div class="kpi"><b>{{ scores.coverage_pct if scores.coverage_pct is number else "—" }}%</b><span>coverage</span></div>
+    <div class="kpi"><b>{{ findings | length }}</b><span>confirmed findings</span></div>
+    <div class="kpi"><b>{{ dropped_count }}</b><span>dropped in cross-exam</span></div>
+  </div>
+  {% if scores.gates %}
+  <ul class="gates">{% for gate in scores.gates %}<li>Gate: {{ gate }}</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+
+{% if report.executive_summary %}
+<h2>Executive summary</h2>
+<p>{{ report.executive_summary }}</p>
+{% if report.verdict_rationale %}<p class="meta">{{ report.verdict_rationale }}</p>{% endif %}
+{% endif %}
+
+<h2>Scores by dimension</h2>
+<div class="card dims">
+{% for dim in dimensions %}
+{% set d = scores.dimensions[dim] %}
+  <div class="dim">
+    <span>{{ dim | capitalize }}<br><span class="na">weight {{ ((d.weight or 0) * 100) | round | int }}%</span></span>
+    {% if d.score is number %}
+    <div class="track" role="img" aria-label="{{ dim }} {{ d.score }} of 100"><div class="fill" style="width:{{ d.score }}%"></div></div>
+    <span class="score">{{ d.score }}</span>
+    {% else %}
+    <span class="na">Not tested</span><span class="score na">N/A</span>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+
+{% if report.highlights or report.top_risks %}
+<div class="grid" style="margin-top:24px">
+  {% if report.highlights %}<div class="card"><h3>Strengths</h3><ul class="clean">{% for h in report.highlights %}<li>{{ h }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if report.top_risks %}<div class="card"><h3>Top risks</h3><ul class="clean">{% for fid in report.top_risks %}<li><a href="#{{ fid }}">{{ fid }}</a>{% for f in findings if f.id == fid %} — {{ f.title }}{% endfor %}</li>{% endfor %}</ul></div>{% endif %}
+</div>
+{% endif %}
+
+<h2>Findings ({{ findings | length }})</h2>
+{% for f in findings %}
+<details class="finding sev-{{ f.severity }}" id="{{ f.id }}"{% if f.severity in ("critical", "high") %} open{% endif %}>
+  <summary><span class="sev">{{ f.severity }}</span><b>{{ f.title }}</b><span class="fid">{{ f.id }} · {{ f.dimension }} · {{ f.agent }} · confidence {{ "%.0f" | format((f.confidence or 0) * 100) }}%</span></summary>
+  <p>{{ f.claim }}</p>
+  {% if f.repro %}<p class="meta">Reproduce</p><pre>{{ f.repro }}</pre>{% endif %}
+  <div class="evidence"><p class="meta">Evidence</p><ul class="clean">
+  {% for ref in f.evidence %}
+  {% set href = ref | evidence_href %}
+    <li>{% if href %}<a href="{{ href }}">{{ ref }}</a>{% if ref is image %}<br><img src="{{ href }}" alt="Evidence screenshot for {{ f.id }}" loading="lazy">{% endif %}{% else %}<code>{{ ref }}</code>{% endif %}</li>
+  {% endfor %}
+  </ul></div>
+  {% if f.challenge %}<p class="meta">Challenged: {{ f.challenge }}{% if f.rebuttal %} — Rebuttal: {{ f.rebuttal }}{% endif %}</p>{% endif %}
+</details>
+{% else %}
+<p class="meta">No confirmed findings.</p>
+{% endfor %}
+
+{% if usecases.use_cases %}
+<h2>Where this fits</h2>
+<div class="grid">
+{% for u in usecases.use_cases %}
+  <div class="card">
+    <span class="fit">{{ u.fit }} fit{% if u.industries %} · {{ u.industries | join(", ") }}{% endif %}</span>
+    <h3>{{ u.title }}</h3>
+    <p>{{ u.scenario }}</p>
+    <p class="meta">{{ u.why }}</p>
+    {% if u.integration_sketch %}<p><b>Integration:</b> {{ u.integration_sketch }}</p>{% endif %}
+    {% if u.prerequisites %}<p><b>Before you start</b></p><ul class="clean">{% for p in u.prerequisites %}<li>{{ p }}</li>{% endfor %}</ul>{% endif %}
+    {% if u.risks %}<p><b>Risks</b></p><ul class="clean">{% for r in u.risks %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+  </div>
+{% endfor %}
+</div>
+{% endif %}
+
+{% if usecases.anti_use_cases %}
+<h2>Where not to use it</h2>
+<ul class="clean">{% for a in usecases.anti_use_cases %}<li><b>{{ a.title }}</b> — {{ a.why }}</li>{% endfor %}</ul>
+{% endif %}
+
+{% if usecases.alternatives %}
+<h2>Alternatives</h2>
+<div class="table-wrap"><table><thead><tr><th>Alternative</th><th>Better when</th><th>Worse when</th></tr></thead><tbody>
+{% for a in usecases.alternatives %}
+<tr><td>{% if a.url and a.url.startswith("https://") %}<a href="{{ a.url }}">{{ a.name }}</a>{% else %}{{ a.name }}{% endif %}</td><td>{{ a.when_better }}</td><td>{{ a.when_worse }}</td></tr>
+{% endfor %}
+</tbody></table></div>
+{% endif %}
+
+{% if usecases.integration_patterns %}
+<h3 style="margin-top:16px">Integration patterns</h3>
+<ul class="clean">{% for p in usecases.integration_patterns %}<li>{{ p }}</li>{% endfor %}</ul>
+{% endif %}
+
+<h2>Coverage</h2>
+<div class="card">
+<p>Runtime: <b>{{ runtime.status or "unknown" }}</b>{% if runtime.strategy_used %} via {{ runtime.strategy_used }}{% endif %}{% if runtime.startup_secs is number %} · started in {{ runtime.startup_secs }}s{% endif %}</p>
+{% if run.skipped %}<p class="meta">Skipped agents</p><ul class="clean">{% for agent, reason in run.skipped.items() %}<li><b>{{ agent }}</b>: {{ reason }}</li>{% endfor %}</ul>{% endif %}
+{% for agent, info in run.agents.items() if info.status == "failed" %}
+{% if loop.first %}<p class="meta">Agents that failed</p><ul class="clean">{% endif %}
+<li><b>{{ agent }}</b>{% if info.note %}: {{ info.note }}{% endif %}</li>
+{% if loop.last %}</ul>{% endif %}
+{% endfor %}
+{% if report.coverage_notes %}<p class="meta">Not covered</p><ul class="clean">{% for n in report.coverage_notes %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
+{% if run.notes %}<p class="meta">Notes</p><ul class="clean">{% for n in run.notes %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
+</div>
+
+{% if report.next_steps %}
+<h2>Next steps</h2>
+<ol>{% for s in report.next_steps %}<li>{{ s }}</li>{% endfor %}</ol>
+{% endif %}
+
+<footer>Generated {{ generated_at }} by E2E Agent Tester. Scores come only from findings that survived cross-examination; every finding links to its evidence inside this run folder.</footer>
+</main>
+</body>
+</html>
