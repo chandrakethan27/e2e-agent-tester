@@ -1,0 +1,13 @@
+{
+  "name": "broken-build",
+  "version": "1.0.0",
+  "description": "Fixture whose dependencies cannot be installed",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "e2eat-this-package-does-not-exist": "^9.9.9"
+  },
+  "license": "MIT"
+}
