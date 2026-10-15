@@ -30,7 +30,8 @@ Profiles: `adopt` (is it safe and solid enough for enterprise/client work?), `ra
 1. `./bin/e2eat doctor` — if a required check fails, stop and tell the user exactly what to fix (e.g. "Start Docker Desktop, then rerun").
 2. `./bin/e2eat sandbox stale` — clean leftovers from old runs.
 3. New run: `./bin/e2eat init <source> --profile <p> --depth <d>` → `run_dir`, `run_id`, `budgets`. Resume (`--resume <run-id>`): `RUN_DIR=runs/<run-id>`, `./bin/e2eat status $RUN_DIR`, continue from the first phase that is not `done`.
-4. Tell the user the run id, profile, depth and expected time (quick ≈ 15 min, standard ≈ 45, deep ≈ 90).
+4. **Live view:** `./bin/e2eat web start --run-id <run-id>` builds the Next.js visualization (first time ≈ 1–2 min) and opens it in the browser; it animates every agent as it works. If it fails (Docker down, port busy), say so in one line and continue — the site is optional. Leave it running after the run so the user can open the report from it (`./bin/e2eat web stop` stops it).
+5. Tell the user the run id, profile, depth and expected time (quick ≈ 15 min, standard ≈ 45, deep ≈ 90).
 
 ## Phase 0 · Intake
 `./bin/e2eat phase $RUN_DIR intake running` → spawn **recon-agent** → validate → `./bin/e2eat phase $RUN_DIR intake done`. Update the user: project type and stack.
@@ -43,7 +44,8 @@ Intake has cloned and fingerprinted the repo but nothing has been executed yet. 
    - which agents run (`./bin/e2eat squad $RUN_DIR`) and what each will check for this project type (journeys, own test suite, load, security scans, architecture, license/viability);
    - what **cannot** be tested and why (required secrets/API keys missing in `secrets.env`, paid services, no UI, hardware) — these become "untested", not "passed";
    - profile, depth, expected time, and Docker/disk needs.
-3. **Ask to proceed** with AskUserQuestion: `Start as planned (Recommended)` / `Change depth or profile` / `Static review only (don't run it)` / `Cancel`. Wait for the answer. If the user picks static-only, skip Phase 1, write no runtime facts, and mark it in the final answer. If the user cancels, tear down and stop. If they change depth/profile, re-run `init` options via a new run.
+3. Write `$RUN_DIR/blackboard/facts/briefing.json` — `{"summary": "<the 4–6 line summary>", "plan": ["<plan bullet>", …], "cannot_test": ["<item>", …]}` — so the live site shows the same briefing.
+4. **Ask to proceed** with AskUserQuestion: `Start as planned (Recommended)` / `Change depth or profile` / `Static review only (don't run it)` / `Cancel`. Wait for the answer. If the user picks static-only, skip Phase 1, write no runtime facts, and mark it in the final answer. If the user cancels, tear down and stop. If they change depth/profile, re-run `init` options via a new run.
 
 ## Phase 1 · Build & run
 `./bin/e2eat phase $RUN_DIR build running` → spawn **runner-agent** → validate → `./bin/e2eat phase $RUN_DIR build done`. Update the user: runtime status and strategy.

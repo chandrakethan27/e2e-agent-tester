@@ -7,3 +7,6 @@ __pycache__/
 .DS_Store
 tools/.venv/
 .gstack/
+web/node_modules
+web/.next
+web/next-env.d.ts
