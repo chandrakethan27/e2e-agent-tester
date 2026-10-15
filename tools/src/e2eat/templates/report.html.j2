@@ -75,6 +75,8 @@ footer{margin-top:48px;color:var(--muted);font-size:.85rem}
   {% if recon.summary %}<p>{{ recon.summary }}</p>{% endif %}
 </header>
 
+{% if notice %}<section class="card" style="border-left:6px solid var(--bad)"><b>{{ notice.level }} — {{ notice.title }}</b><p>{{ notice.text }}</p></section>
+{% endif %}
 <section class="card verdict">
   <span class="badge tone-{{ scores.verdict | tone }}">{{ scores.verdict or "Not scored" }}</span>
   <div class="kpis">

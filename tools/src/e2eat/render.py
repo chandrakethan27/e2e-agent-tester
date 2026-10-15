@@ -29,15 +29,32 @@ def verdict_tone(verdict: object) -> str:
     return VERDICT_TONE.get(str(verdict or "").split(" (")[0], "neutral")
 
 
+def testing_notice(run: dict, runtime: dict) -> dict | None:
+    """Tell the reader when the verdict rests on less than a full run of the project."""
+    if runtime.get("status") != "running":
+        return {"level": "NOT RUN", "title": "The project was NOT run",
+                "text": "This verdict comes from static review only (code, dependencies, configuration, repository health). "
+                        "No journeys, load or reliability checks ran against a live instance, so behaviour is unverified."}
+    failed = {name: entry.get("note", "no reason recorded") for name, entry in run.get("agents", {}).items() if entry.get("status") == "failed"}
+    if failed:
+        return {"level": "PARTIAL", "title": "Some checks did not complete",
+                "text": "The project ran, but these agents failed, so their areas are untested: "
+                        + "; ".join(f"{name} ({note})" for name, note in sorted(failed.items())) + "."}
+    return None
+
+
 def gather(run_dir: Path, now: datetime | None = None) -> dict:
     run_dir = Path(run_dir)
     facts = run_dir / "blackboard" / "facts"
     findings = load_findings(run_dir)
     confirmed = sorted((f for f in findings if f.get("status") == "confirmed"), key=lambda f: (severity_rank(f), f["id"]))
+    run = read_json(run_dir / "run.json")
+    runtime = read_json_or(facts / "runtime.json", {})
     return {
-        "run": read_json(run_dir / "run.json"),
+        "notice": testing_notice(run, runtime),
+        "run": run,
         "recon": read_json_or(facts / "recon.json", {}),
-        "runtime": read_json_or(facts / "runtime.json", {}),
+        "runtime": runtime,
         "scores": read_json_or(run_dir / "scores.json", {}),
         "usecases": read_json_or(run_dir / "usecases.json", {}),
         "report": read_json_or(run_dir / "report.json", {}),

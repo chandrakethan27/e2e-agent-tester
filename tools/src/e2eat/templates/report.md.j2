@@ -2,6 +2,10 @@
 
 - Run `{{ run.run_id }}` · profile **{{ run.profile }}** · depth **{{ run.depth }}**
 - Project type: {{ recon.project_type or "unknown" }} · runtime: **{{ runtime.status or "unknown" }}**
+{% if notice %}
+> **{{ notice.level }} — {{ notice.title }}.** {{ notice.text }}
+
+{% endif %}
 - **Verdict: {{ scores.verdict or "Not scored" }}** · overall {{ scores.overall if scores.overall is number else "—" }}/100 · coverage {{ scores.coverage_pct if scores.coverage_pct is number else "—" }}%
 {% for gate in scores.gates %}
 - Gate: {{ gate }}

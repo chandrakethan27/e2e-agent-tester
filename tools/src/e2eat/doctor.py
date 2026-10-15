@@ -10,6 +10,7 @@ from typing import Callable
 from .paths import secrets_file
 from .sandbox import Runner, default_runner
 
+MIN_FREE_BYTES = 5 * 1024**3
 BROWSE_BIN = Path.home() / ".claude" / "skills" / "gstack" / "browse" / "dist" / "browse"
 
 
@@ -26,6 +27,7 @@ def run_checks(
     which: Callable[[str], str | None] = shutil.which,
     browse_bin: Path = BROWSE_BIN,
     secrets: Path | None = None,
+    disk_free: Callable[[], int] = lambda: shutil.disk_usage(Path.home()).free,
 ) -> list[Check]:
     checks = [Check(tool, bool(which(tool)), which(tool) or "not on PATH") for tool in ("git", "docker", "uv")]
     if which("docker"):
@@ -43,4 +45,8 @@ def run_checks(
     secrets = secrets or secrets_file()
     checks.append(Check("secrets.env", secrets.exists(),
                         str(secrets) if secrets.exists() else "no secrets.env — features needing API keys are reported untested", required=False))
+    free = disk_free()
+    checks.append(Check("disk space", free >= MIN_FREE_BYTES,
+                        f"{free / 1024**3:.1f} GiB free" if free >= MIN_FREE_BYTES
+                        else f"only {free / 1024**3:.1f} GiB free — need {MIN_FREE_BYTES // 1024**3} GiB; Docker image builds fail on a full disk"))
     return checks

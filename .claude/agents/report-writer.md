@@ -11,7 +11,7 @@ Write `$RUN_DIR/report.json` (schema: `./bin/e2eat schema report`):
 - `verdict_rationale`: how scores, gates and coverage produced the verdict; name every triggered gate.
 - `highlights`: 3–6 evidence-backed strengths (passing journeys, performance numbers, clean scans, good docs).
 - `top_risks`: up to 5 confirmed finding ids, most severe first.
-- `coverage_notes`: what was not tested and why (skipped agents, missing secrets, static-only mode, failed scanners), so the reader knows the verdict's limits.
+- `coverage_notes`: if the project was not run or any agent failed, the first note says so plainly (the renderer also adds a banner). What was not tested and why (skipped agents, missing secrets, static-only mode, failed scanners), so the reader knows the verdict's limits.
 - `next_steps`: ordered, concrete actions (fix X, verify Y, pilot Z with team W).
 
 Do not invent anything that is not on the blackboard. Do not change scores. Validate with `./bin/e2eat validate $RUN_DIR`. Reply ≤100 words.

@@ -35,8 +35,19 @@ Profiles: `adopt` (is it safe and solid enough for enterprise/client work?), `ra
 ## Phase 0 · Intake
 `./bin/e2eat phase $RUN_DIR intake running` → spawn **recon-agent** → validate → `./bin/e2eat phase $RUN_DIR intake done`. Update the user: project type and stack.
 
+## Briefing & test plan (checkpoint — before any build or test)
+Intake has cloned and fingerprinted the repo but nothing has been executed yet. Talk to the user **in the chat** (plain prose, not tool output) before Phase 1:
+1. **What this repo is** — 4–6 lines from `blackboard/facts/recon.json` and the README: purpose, who uses it, stack, project type, size, license, repo health. Say what you could not determine.
+2. **How I will test it end to end** — tailored to this repo, as a short list:
+   - how it will be built and started (runtime strategy from recon: repo Dockerfile, toolchain image, …) and in a container only;
+   - which agents run (`./bin/e2eat squad $RUN_DIR`) and what each will check for this project type (journeys, own test suite, load, security scans, architecture, license/viability);
+   - what **cannot** be tested and why (required secrets/API keys missing in `secrets.env`, paid services, no UI, hardware) — these become "untested", not "passed";
+   - profile, depth, expected time, and Docker/disk needs.
+3. **Ask to proceed** with AskUserQuestion: `Start as planned (Recommended)` / `Change depth or profile` / `Static review only (don't run it)` / `Cancel`. Wait for the answer. If the user picks static-only, skip Phase 1, write no runtime facts, and mark it in the final answer. If the user cancels, tear down and stop. If they change depth/profile, re-run `init` options via a new run.
+
 ## Phase 1 · Build & run
-`./bin/e2eat phase $RUN_DIR build running` → spawn **runner-agent** → validate → `./bin/e2eat phase $RUN_DIR build done`. Update the user: runtime status and strategy, or why it could not run (the run continues static-only).
+`./bin/e2eat phase $RUN_DIR build running` → spawn **runner-agent** → validate → `./bin/e2eat phase $RUN_DIR build done`. Update the user: runtime status and strategy.
+**Not-run checkpoint:** if `blackboard/facts/runtime.json` is missing or its `status` is not `running`, STOP and warn the user in the chat before continuing: "The project could NOT be run (<reason>). Everything from here is static review only; functional, performance and reliability results will be absent and the verdict is capped." Then AskUserQuestion: `Continue static-only` / `Retry build with your hint` / `Stop`. Do not proceed to Phase 2 without an answer. The final report and your final answer must repeat this warning.
 
 ## Phase 2 · Assess
 1. `./bin/e2eat squad $RUN_DIR` → squad and skipped agents.
@@ -61,6 +72,7 @@ Profiles: `adopt` (is it safe and solid enough for enterprise/client work?), `ra
 `./bin/e2eat phase $RUN_DIR finalize running` → `./bin/e2eat redact $RUN_DIR` → `./bin/e2eat validate $RUN_DIR` → `./bin/e2eat render $RUN_DIR` → `./bin/e2eat sandbox teardown $RUN_DIR` → `./bin/e2eat phase $RUN_DIR finalize done`.
 
 ## Final answer to the user
+- **First, a testing-completeness line**: "Tested by running the project" / "NOT RUN — static review only" / "PARTIAL — <failed agents>". `report.html` shows the same banner automatically; never soften it. If a failed agent or untested area (missing keys, Docker/disk problems, skipped wave 2) limits the verdict, say so before the verdict.
 - Verdict, overall score and coverage %, plus any triggered gates.
 - The 3 most important confirmed findings (id, severity, one line each).
 - The 3 best use cases and the key anti-use-case.
