@@ -212,3 +212,14 @@ E2EAgentTester/
 - Squad selection is deterministic (`e2eat squad`): runtime agents = functional-tester, suite-runner, perf-agent (dropped when runtime ≠ running); static agents = security, architecture, viability (always).
 - If project agents were created mid-session and are not yet registered, the orchestrator spawns `general-purpose` with "Read .claude/agents/<name>.md and follow it exactly".
 - Host safety is also enforced by `.claude/settings.json` deny rules for host package managers/build tools.
+
+## 12. Revisions after the final review (2026-10-15)
+- Repo compose files are never executed; runner-agent recreates services via `e2eat sandbox build/run`. Repo bind mounts must be read-only; build context/Dockerfile must be inside the run dir; `.`/`..`/`~`/`$VAR` mount sources are paths, not named volumes.
+- Imported `.git` is neutralized at init; host git on evaluated code only via `e2eat git` (allowlisted read-only subcommands, config-exec keys overridden, `GIT_CEILING_DIRECTORIES`). `e2eat git` prints git's raw output (the one non-JSON command besides `guard`).
+- Git sources are cloned with full history (gitleaks needs old blobs); a gitleaks "partial scan" is reported as not ok. Credentials in clone URLs are stripped from run.json and the saved remote.
+- Finding status lives in `finding-status.json` (orchestrator-owned); agent-written status is ignored. Skeptic files are schema-validated before any change is applied.
+- Evidence links are emitted only for refs that pass the evidence check, percent-encoded with a `./` prefix.
+- Redaction works on bytes, JSON string values (structure preserved), JSON-escaped forms and run.json; config literals (true/false/…) and short numbers are not treated as secrets; inline comments and multi-line values in the secrets file are handled.
+- Gate "not built and run" applies to adopt/audit whenever runtime status is not running (missing file included).
+- A `PreToolUse` guard hook (`e2eat guard`) enforces the host-safety rules for every agent; `.claude/settings.json` also denies reading the secrets file and more host toolchains.
+- Sources that contain (or sit inside) the runs folder are refused.

@@ -77,6 +77,8 @@ def run_scans(run_dir: Path, tools: Sequence[str], runner: Runner = default_runn
                   "output": output.relative_to(run_dir).as_posix()}
         if not output.exists():
             return result | {"ok": False, "error": (proc.stderr or proc.stdout or "no output")[-2000:]}
+        if "partial scan" in f"{proc.stdout}{proc.stderr}":
+            return result | {"ok": False, "error": "partial scan: git objects were missing, results are incomplete"}
         try:
             return result | {"ok": True, "count": summarize(tool, json.loads(output.read_text(encoding="utf-8") or "null"))}
         except (json.JSONDecodeError, AttributeError, TypeError) as exc:

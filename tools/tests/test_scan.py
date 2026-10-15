@@ -58,3 +58,13 @@ def test_run_scans_reports_missing_output(run_dir):
 def test_unknown_scanner(run_dir):
     with pytest.raises(ValueError):
         run_scans(run_dir, ["nmap"])
+
+
+def test_partial_gitleaks_scan_is_not_ok(run_dir):
+    def runner(cmd):
+        out_dir = Path(next(v.split(":")[0] for v in cmd if v.endswith(":/out")))
+        (out_dir / "gitleaks.json").write_text("[]")
+        return subprocess.CompletedProcess(cmd, 0, "", "WRN partial scan completed in 1s\nINF no leaks found")
+
+    result = run_scans(run_dir, ["gitleaks"], runner=runner)["results"][0]
+    assert result["ok"] is False and "partial scan" in result["error"]

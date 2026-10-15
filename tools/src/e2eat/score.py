@@ -50,8 +50,8 @@ def _gates(profile: str, confirmed: list[dict], runtime: dict) -> list[str]:
         gates.append("confirmed critical security finding")
     if profile == "adopt" and critical_in("compliance"):
         gates.append("confirmed critical compliance (license) finding")
-    if profile in ("adopt", "audit") and runtime.get("status") == "failed":
-        gates.append("project could not be built or run")
+    if profile in ("adopt", "audit") and runtime.get("status") != "running":
+        gates.append(f"project was not built and run successfully (runtime status: {runtime.get('status', 'missing')})")
     return gates
 
 

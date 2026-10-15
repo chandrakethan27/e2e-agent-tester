@@ -15,9 +15,9 @@ Goal: the project running in an isolated container, verified usable, and `blackb
 - Backing services from `services_needed`, e.g. `./bin/e2eat sandbox run $RUN_DIR --name postgres --image postgres:16 -e POSTGRES_PASSWORD=e2eat -e POSTGRES_DB=app`. The app reaches them by `--name` as hostname.
 
 ## Strategy ladder — stop at the first that works, at most 3 attempts in total
-1. **repo-docker** — the repo ships a Dockerfile or compose file.
+1. **repo-docker** — the repo ships a Dockerfile or compose file. Any `-v` of the repo itself must end in `:ro` (the sandbox refuses writable repo mounts).
    - Dockerfile: `./bin/e2eat sandbox build $RUN_DIR --log $RUN_DIR/blackboard/evidence/runner-agent/attempt-1.log`, then `./bin/e2eat sandbox run $RUN_DIR --name app --image <image_tag> -p <port>`.
-   - Compose: copy it to `repo/.e2eat/compose.yml` and edit the copy — bind every published port to `127.0.0.1`, remove `privileged`, `network_mode: host`, `pid: host`, `cap_add` and Docker-socket mounts, add label `e2eat.run: <run-id>` to each service. Then `docker compose -p <compose_project> -f $RUN_DIR/repo/.e2eat/compose.yml up -d --build`.
+   - Compose: **never run the repo's compose file** — it can mount host folders, read host env vars and files, or forward your SSH agent (the guard hook blocks `docker compose up`). Read it as a blueprint and recreate each service with `./bin/e2eat sandbox build` / `./bin/e2eat sandbox run`: same images and build contexts (inside the repo), environment values, ports and start order (dependencies first). Do not reproduce host bind mounts; mount files from the run dir read-only (`:ro`) only when a service cannot start without them.
 2. **generated-dockerfile** — write `repo/.e2eat/Dockerfile` for the detected stack: pinned slim official base image, deps installed from the lockfile, non-root user when easy, `EXPOSE` the port, `CMD` from run_hints. `./bin/e2eat sandbox build $RUN_DIR --dockerfile $RUN_DIR/repo/.e2eat/Dockerfile --log …/attempt-2.log`.
 3. **toolchain-image** — for CLIs/libraries, or when no server is needed: an image with the language toolchain and deps installed and `sleep infinity` as command, so other agents can `docker exec` into it.
 Save every attempt's log under `blackboard/evidence/runner-agent/`.

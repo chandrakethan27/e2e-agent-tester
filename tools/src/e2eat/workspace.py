@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from .jsonio import read_json, write_json
-from .source import Source, drop_escaping_symlinks, fetch_source, parse_source
+from .source import Source, drop_escaping_symlinks, fetch_source, neutralize_git_dir, parse_source, strip_userinfo
 
 PROFILES = ("adopt", "radar", "audit")
 DEPTHS = ("quick", "standard", "deep")
@@ -58,6 +58,10 @@ def init_run(
     _check(profile, PROFILES, "profile")
     _check(depth, DEPTHS, "depth")
     source = parse_source(raw_source)
+    if source.kind == "dir":
+        src, runs = Path(source.location), Path(runs_root).resolve()
+        if runs.is_relative_to(src) or src.is_relative_to(runs):
+            raise ValueError(f"source {src} contains the runs folder (or is inside it); evaluate a copy stored elsewhere")
     now = now or _now()
     run_id = make_run_id(source.slug, now)
     run_dir = Path(runs_root) / run_id
@@ -68,12 +72,13 @@ def init_run(
     try:
         fetch(source, run_dir / "repo")
         dropped = drop_escaping_symlinks(run_dir / "repo")
+        git_notes = neutralize_git_dir(run_dir / "repo") if source.kind != "git" else []
     except BaseException:
         shutil.rmtree(run_dir, ignore_errors=True)
         raise
     save_run(run_dir, {
         "run_id": run_id,
-        "source": {"raw": raw_source, "kind": source.kind, "location": source.location, "ref": source.ref},
+        "source": {"raw": strip_userinfo(raw_source), "kind": source.kind, "location": strip_userinfo(source.location), "ref": source.ref},
         "profile": profile,
         "depth": depth,
         "budgets": BUDGETS[depth],
@@ -82,7 +87,7 @@ def init_run(
         "squad": [],
         "skipped": {},
         "agents": {},
-        "notes": [f"removed symlink escaping repo: {path}" for path in dropped],
+        "notes": [f"removed symlink escaping repo: {path}" for path in dropped] + git_notes,
     })
     return run_dir
 

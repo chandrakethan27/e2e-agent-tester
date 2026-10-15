@@ -75,3 +75,11 @@ def test_score_run_writes_valid_scores(run_dir):
     scores = score_run(run_dir)
     assert read_json(run_dir / "scores.json") == scores
     assert validate_run(run_dir) == []
+
+
+def test_missing_or_static_runtime_gates_adopt_and_audit():
+    done = ["runner-agent", "security-agent", "architecture-agent", "viability-agent"]
+    for runtime in ({}, {"status": "static-only"}):
+        s = compute_scores(run_with("adopt", done), [], runtime)
+        assert s["verdict"] == "Hold" and s["gates"][0].startswith("project was not built and run")
+    assert compute_scores(run_with("radar", done), [], {})["gates"] == []

@@ -11,6 +11,7 @@ from ..redact import parse_env_file
 from ..sandbox import (
     LABEL,
     build_cmd,
+    check_build_inputs,
     compose_project,
     container_name,
     execute,
@@ -102,7 +103,9 @@ def _build(args: argparse.Namespace) -> int:
     run_dir = args.run_dir.resolve()
     rid = _run_id(run_dir)
     log = args.log or _default_log(run_dir, f"build-{args.name}.log")
-    result = execute(build_cmd(rid, args.context or run_dir / "repo", args.dockerfile, args.name), log, args.timeout)
+    context = args.context or run_dir / "repo"
+    check_build_inputs(run_dir, context, args.dockerfile)
+    result = execute(build_cmd(rid, context, args.dockerfile, args.name), log, args.timeout)
     emit({"ok": result["exit_code"] == 0, "image": image_tag(rid, args.name), **result})
     return 0 if result["exit_code"] == 0 else 1
 

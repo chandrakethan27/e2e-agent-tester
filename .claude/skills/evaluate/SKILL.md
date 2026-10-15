@@ -68,4 +68,6 @@ Profiles: `adopt` (is it safe and solid enough for enterprise/client work?), `ra
 
 ## Failure rules
 - An agent failing or timing out never stops the run: mark it `failed`, continue; its dimensions become N/A and coverage drops.
+- If runner-agent fails without writing `runtime.json`, the scoring gate treats the project as not run (adopt/audit verdict capped). Say so in your final answer.
+- If `apply-crossexam` rejects a skeptic file as invalid, SendMessage the skeptic the error once and rerun it; never edit the file yourself.
 - If you must stop early (user abort, fatal error): run `./bin/e2eat sandbox teardown $RUN_DIR` first and mark the current phase `failed`.

@@ -12,6 +12,7 @@
       "WebSearch"
     ],
     "deny": [
+      "Read(./secrets.env)",
       "Bash(npm:*)",
       "Bash(npx:*)",
       "Bash(pnpm:*)",
@@ -32,7 +33,29 @@
       "Bash(bundle:*)",
       "Bash(make:*)",
       "Bash(composer:*)",
-      "Bash(dotnet:*)"
+      "Bash(dotnet:*)",
+      "Bash(uvx:*)",
+      "Bash(uv pip:*)",
+      "Bash(node:*)",
+      "Bash(deno:*)",
+      "Bash(./gradlew:*)",
+      "Bash(./mvnw:*)",
+      "Bash(rake:*)",
+      "Bash(tox:*)",
+      "Bash(pytest:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/bin/e2eat guard"
+          }
+        ]
+      }
     ]
   }
 }

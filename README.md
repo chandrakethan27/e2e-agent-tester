@@ -44,7 +44,11 @@ Sources: `https://github.com/o/r`, `…/tree/<branch>`, `git@github.com:o/r.git`
 
 ## Safety
 - Evaluated code runs **only in Docker** with CPU/memory/pid limits, no privileges, a per-run network, and ports bound to 127.0.0.1. Host package managers are denied in `.claude/settings.json`.
-- Symlinks escaping the repo are removed; archives with path traversal are rejected.
+- A **PreToolUse guard hook** (`./bin/e2eat guard`, wired in `.claude/settings.json`) blocks unsafe Bash from any agent: host bind mounts outside `runs/`, privileged/host-namespace containers, running a repo's compose file, reading the secrets file, `curl`/`wget` to external hosts, and raw git on evaluated code.
+- Repo compose files are never executed; services are recreated through the sandbox. Mounts of the evaluated repo are read-only.
+- Imported `.git` metadata is neutralized (config reset, hooks removed, gitdir redirects dropped) and host git runs only through the hardened, read-only `./bin/e2eat git`.
+- Finding status lives in an orchestrator-owned ledger (`finding-status.json`); agents cannot confirm their own findings.
+- Symlinks escaping the repo are removed; archives with path traversal are rejected; credentials in clone URLs are stripped before anything is stored.
 - Only the secrets a project needs are passed to its containers; secret values are scrubbed from evidence before rendering.
 - Every container/network/volume/image is labeled `e2eat.run=<run-id>` and torn down at the end (`./bin/e2eat sandbox stale` cleans up interrupted runs).
 - Limitation: containers have outbound internet access (needed for installs).

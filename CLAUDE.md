@@ -9,6 +9,7 @@ Claude Code-native multi-agent system: `/evaluate <repo>` builds, runs, tests an
 ## Rules
 - Never run an evaluated project's code, package manager or build on the host — containers only. `.claude/settings.json` denies host package managers.
 - Every Docker resource of a run carries `e2eat.run=<run-id>`; always finish with `./bin/e2eat sandbox teardown <run-dir>`.
-- Scores come only from `./bin/e2eat score`; agents never write scores.
+- Scores come only from `./bin/e2eat score`; agents never write scores. Finding status comes only from `finding-status.json` (written by `e2eat` on the orchestrator's behalf).
+- The `PreToolUse` guard hook (`./bin/e2eat guard`) applies to this whole project, including you: it blocks reading the secrets file outside e2eat, external curl/wget, compose up, host bind mounts, and raw git under `runs/`. Use `./bin/e2eat git <run-dir> …` for history.
 - New CLI command group: add `tools/src/e2eat/cli/<name>_cmds.py` with `register(sub)`; it is discovered automatically.
 - New agent: add `.claude/agents/<name>.md` (frontmatter `name`, `description`, `tools`; body must point to the agent contract), wire it into `squad.py`/`score.py` if it covers a dimension, and extend `tools/tests/test_agent_definitions.py` expectations.

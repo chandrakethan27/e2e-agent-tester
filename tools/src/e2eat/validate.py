@@ -46,11 +46,14 @@ def evidence_problem(run_dir: Path, ref: str) -> str | None:
     if not target or Path(target).is_absolute():
         return f"evidence must be a path relative to the run dir: {ref}"
     root = Path(run_dir).resolve()
-    path = (root / target).resolve()
-    if not path.is_relative_to(root):
-        return f"evidence escapes the run dir: {ref}"
-    if not path.exists():
-        return f"evidence not found: {ref}"
+    try:
+        path = (root / target).resolve()
+        if not path.is_relative_to(root):
+            return f"evidence escapes the run dir: {ref}"
+        if not path.exists():
+            return f"evidence not found: {ref}"
+    except (ValueError, OSError):
+        return f"evidence path is invalid: {ref!r}"
     return None
 
 
@@ -68,6 +71,8 @@ def validate_file(run_dir: Path, rel: Path, kind: str, check_evidence: bool = Fa
         data = json.loads((run_dir / rel).read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         return [f"invalid JSON: {exc}"]
+    except OSError as exc:
+        return [f"unreadable: {exc}"]
     errors = validate_document(data, kind)
     if errors or kind not in QUARANTINABLE:
         return errors

@@ -50,7 +50,7 @@ def test_fetch_git_builds_clone_command(tmp_path):
     calls = []
     fetch_source(parse_source("https://github.com/o/r/tree/dev"), tmp_path / "x", runner=lambda cmd, check: calls.append(cmd))
     assert calls == [
-        ["git", "clone", "--filter=blob:none", "--no-tags", "--branch", "dev", "https://github.com/o/r.git", str(tmp_path / "x")]
+        ["git", "clone", "--no-tags", "--branch", "dev", "https://github.com/o/r.git", str(tmp_path / "x")]
     ]
 
 
@@ -97,3 +97,22 @@ def test_drop_escaping_symlinks(tmp_path):
     assert drop_escaping_symlinks(root) == ["outside"]
     assert (root / "inside").is_symlink()
     assert not (root / "outside").is_symlink()
+
+
+def test_strip_userinfo():
+    from e2eat.source import strip_userinfo
+
+    assert strip_userinfo("https://user:tok@git.example.com/a/b.git") == "https://***@git.example.com/a/b.git"
+    assert strip_userinfo("https://github.com/o/r.git") == "https://github.com/o/r.git"
+
+
+def test_fetch_git_clones_full_history(tmp_path):
+    calls = []
+    fetch_source(parse_source("https://github.com/o/r"), tmp_path / "x", runner=lambda cmd, check: calls.append(cmd))
+    assert "--filter=blob:none" not in calls[0]
+
+
+def test_fetch_git_scrubs_credentials_from_saved_remote(tmp_path):
+    calls = []
+    fetch_source(parse_source("https://user:tok@git.example.com/a/b.git"), tmp_path / "x", runner=lambda cmd, check: calls.append(cmd))
+    assert calls[1] == ["git", "-C", str(tmp_path / "x"), "remote", "set-url", "origin", "https://***@git.example.com/a/b.git"]

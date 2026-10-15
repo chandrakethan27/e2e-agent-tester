@@ -10,9 +10,10 @@ from typing import Callable, Sequence
 
 LABEL = "e2eat.run"
 LIMITS = ("--cpus", "2", "--memory", "4g", "--pids-limit", "1024", "--security-opt", "no-new-privileges")
-_UNSAFE_FLAGS = re.compile(
+UNSAFE_FLAGS = re.compile(
     r"--privileged|(?:--net(?:work)?|--pid|--ipc|--userns|--uts)[= ]host\b|--cap-add[= ](?:ALL|SYS_ADMIN)\b|docker\.sock"
 )
+NAMED_VOLUME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _PORT = re.compile(r"^(\d{1,5})(?::(\d{1,5}))?$")
 _RUN_STAMP = re.compile(r"-(\d{8}-\d{6})$")
 
@@ -58,12 +59,25 @@ def _port_mapping(spec: str) -> str:
     return f"127.0.0.1:{host}:{container}"
 
 
+def _inside(run_dir: Path, path: Path) -> bool:
+    return Path(path).resolve().is_relative_to(Path(run_dir).resolve())
+
+
 def _check_volume(spec: str, run_dir: Path) -> None:
-    source = spec.split(":", 1)[0]
-    if "/" not in source:
+    source, _, rest = spec.partition(":")
+    if NAMED_VOLUME.match(source):
         return  # named volume
-    if not Path(source).resolve().is_relative_to(Path(run_dir).resolve()):
+    if "$" in source or not _inside(run_dir, Path(source)):
         raise ValueError(f"bind mounts must come from inside the run dir: {spec}")
+    options = rest.partition(":")[2].split(",")
+    if _inside(Path(run_dir) / "repo", Path(source)) and "ro" not in options:
+        raise ValueError(f"mounts of the evaluated repo must be read-only (append :ro): {spec}")
+
+
+def check_build_inputs(run_dir: Path, context: Path, dockerfile: Path | None) -> None:
+    for path in (context, dockerfile):
+        if path is not None and not _inside(run_dir, path):
+            raise ValueError(f"build context and Dockerfile must be inside the run dir: {path}")
 
 
 def run_cmd(
@@ -81,7 +95,7 @@ def run_cmd(
     detach: bool = True,
 ) -> list[str]:
     joined = " ".join(extra)
-    if _UNSAFE_FLAGS.search(joined) or any("docker.sock" in v for v in volumes):
+    if UNSAFE_FLAGS.search(joined) or any("docker.sock" in v for v in volumes):
         raise ValueError(f"refusing unsafe docker options: {joined or ', '.join(volumes)}")
     for volume in volumes:
         _check_volume(volume, run_dir)

@@ -76,3 +76,17 @@ def test_quarantine_moves_invalid_findings(run_dir):
 def test_unknown_schema_name():
     with pytest.raises(ValueError):
         load_schema("nope")
+
+
+@pytest.mark.parametrize("ref", ["blackboard/evidence/a\x00b.txt", "x" * 300])
+def test_unrepresentable_evidence_is_an_issue_and_others_still_quarantine(run_dir, ref):
+    add_finding(run_dir, with_evidence=False, evidence=[ref])
+    add_finding(run_dir, id="F-security-002", with_evidence=False, evidence=["../x"])
+    issues = validate_run(run_dir, check_evidence=True, quarantine=True)
+    assert {i.path for i in issues} == {"blackboard/findings/F-security-001.json", "blackboard/findings/F-security-002.json"}
+    assert not list((run_dir / "blackboard/findings").glob("*.json"))
+
+
+def test_directory_named_like_a_finding_is_an_issue(run_dir):
+    (run_dir / "blackboard/findings/F-security-001.json").mkdir()
+    assert validate_run(run_dir)[0].message.startswith("unreadable")

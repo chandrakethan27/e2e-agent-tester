@@ -22,6 +22,9 @@ _GITHUB = re.compile(
 )
 _GITHUB_SSH = re.compile(r"^git@github\.com:(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+?)(?:\.git)?/?$")
 _GIT_URL = re.compile(r"^https?://\S+\.git/?$")
+_USERINFO = re.compile(r"^(https?://)[^/@\s]+@")
+# Imported .git metadata is attacker-controlled; host-side git must never see its config or hooks.
+SAFE_GIT_CONFIG = "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n"
 
 
 @dataclass(frozen=True)
@@ -30,6 +33,11 @@ class Source:
     location: str  # clone URL or absolute local path
     slug: str  # safe for run ids, docker names and compose projects
     ref: str | None = None
+
+
+def strip_userinfo(url: str) -> str:
+    """Hide user:token@ in URLs before they are stored or shown."""
+    return _USERINFO.sub(r"\1***@", url)
 
 
 def slugify(text: str) -> str:
@@ -66,10 +74,12 @@ def parse_source(raw: str) -> Source:
 
 def fetch_source(source: Source, dest: Path, runner: Callable[..., object] = subprocess.run) -> None:
     if source.kind == "git":
-        cmd = ["git", "clone", "--filter=blob:none", "--no-tags"]  # full history metadata, blobs on demand
+        cmd = ["git", "clone", "--no-tags"]  # full history: secret scanners need old blobs offline
         if source.ref:
             cmd += ["--branch", source.ref]
         runner([*cmd, source.location, str(dest)], check=True)
+        if strip_userinfo(source.location) != source.location:
+            runner(["git", "-C", str(dest), "remote", "set-url", "origin", strip_userinfo(source.location)], check=True)
     elif source.kind == "dir":
         shutil.copytree(source.location, dest, symlinks=True, ignore=COPY_IGNORE)
     elif source.kind == "archive":
@@ -121,3 +131,16 @@ def drop_escaping_symlinks(root: Path) -> list[str]:
                 if name in dirnames:
                     dirnames.remove(name)
     return sorted(dropped)
+
+
+def neutralize_git_dir(root: Path) -> list[str]:
+    """Drop gitdir redirects and hooks, and reset config, so host git cannot run repo-controlled commands."""
+    git = Path(root) / ".git"
+    if git.is_symlink() or git.is_file():
+        git.unlink()
+        return ["removed .git file (gitdir redirect) from the source"]
+    if git.is_dir():
+        shutil.rmtree(git / "hooks", ignore_errors=True)
+        (git / "config").write_text(SAFE_GIT_CONFIG, encoding="utf-8")
+        return ["reset imported .git/config and removed .git/hooks"]
+    return []

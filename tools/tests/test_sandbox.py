@@ -98,3 +98,26 @@ def test_execute_captures_output_and_timeout(tmp_path):
     assert ok["exit_code"] == 0 and (tmp_path / "a.log").read_text().strip() == "hello"
     slow = execute(["sleep", "5"], timeout=0.2)
     assert slow["exit_code"] == 124 and "timed out" in slow["tail"]
+
+
+@pytest.mark.parametrize("volume", [".:/app", "..:/x", "~:/h", "$HOME:/h"])
+def test_relative_and_home_mounts_are_paths_not_named_volumes(tmp_path, volume):
+    with pytest.raises(ValueError):
+        run_cmd(RID, tmp_path, "img", "app", volumes=[volume])
+
+
+def test_repo_mounts_must_be_read_only(tmp_path):
+    (tmp_path / "repo").mkdir()
+    with pytest.raises(ValueError, match="read-only"):
+        run_cmd(RID, tmp_path, "img", "app", volumes=[f"{tmp_path}/repo:/src"])
+    assert f"{tmp_path}/repo:/src:ro" in run_cmd(RID, tmp_path, "img", "app", volumes=[f"{tmp_path}/repo:/src:ro"])
+
+
+def test_build_inputs_must_stay_in_run_dir(tmp_path):
+    from e2eat.sandbox import check_build_inputs
+
+    check_build_inputs(tmp_path, tmp_path / "repo", tmp_path / "repo" / ".e2eat" / "Dockerfile")
+    with pytest.raises(ValueError):
+        check_build_inputs(tmp_path, tmp_path.parent, None)
+    with pytest.raises(ValueError):
+        check_build_inputs(tmp_path, tmp_path / "repo", tmp_path.parent / "Dockerfile")

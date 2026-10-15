@@ -2,33 +2,27 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from jinja2 import ChainableUndefined, Environment, PackageLoader
 
 from .blackboard import load_findings, severity_rank
 from .jsonio import read_json, read_json_or
 from .score import DIMENSIONS
-from .validate import LINE_SUFFIX
+from .validate import LINE_SUFFIX, evidence_problem
 
-_SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 VERDICT_TONE = {"Adopt": "good", "Production-ready": "good", "Trial": "ok", "Needs work": "ok",
                 "Assess": "warn", "Hold": "bad", "Not ready": "bad"}
 
 
-def evidence_href(ref: str) -> str | None:
-    """Relative link for evidence inside the run folder; None for anything that could leave it."""
-    target = LINE_SUFFIX.sub("", ref)
-    if not target or target.startswith(("/", "\\")) or _SCHEME.match(target) or ".." in Path(target).parts:
+def evidence_href(run_dir: Path, ref: str) -> str | None:
+    """Link only evidence that exists inside the run folder, percent-encoded so a browser cannot read it as a URL scheme."""
+    if evidence_problem(run_dir, ref) is not None:
         return None
-    return target
-
-
-def is_image(ref: str) -> bool:
-    return (evidence_href(ref) or "").lower().endswith(IMAGE_SUFFIXES)
+    return "./" + quote(LINE_SUFFIX.sub("", ref))
 
 
 def verdict_tone(verdict: object) -> str:
@@ -54,7 +48,7 @@ def gather(run_dir: Path, now: datetime | None = None) -> dict:
     }
 
 
-def _environment(autoescape: bool) -> Environment:
+def _environment(autoescape: bool, run_dir: Path) -> Environment:
     env = Environment(
         loader=PackageLoader("e2eat", "templates"),
         autoescape=autoescape,
@@ -62,9 +56,9 @@ def _environment(autoescape: bool) -> Environment:
         trim_blocks=True,
         lstrip_blocks=True,
     )
-    env.filters["evidence_href"] = evidence_href
+    env.filters["evidence_href"] = lambda ref: evidence_href(run_dir, ref)
     env.filters["tone"] = verdict_tone
-    env.tests["image"] = is_image
+    env.tests["image"] = lambda ref: (evidence_href(run_dir, ref) or "").lower().endswith(IMAGE_SUFFIXES)
     return env
 
 
@@ -72,6 +66,6 @@ def render_run(run_dir: Path, now: datetime | None = None) -> dict[str, str]:
     run_dir = Path(run_dir)
     context = gather(run_dir, now)
     html_path, md_path = run_dir / "report.html", run_dir / "report.md"
-    html_path.write_text(_environment(True).get_template("report.html.j2").render(**context), encoding="utf-8")
-    md_path.write_text(_environment(False).get_template("report.md.j2").render(**context), encoding="utf-8")
+    html_path.write_text(_environment(True, run_dir).get_template("report.html.j2").render(**context), encoding="utf-8")
+    md_path.write_text(_environment(False, run_dir).get_template("report.md.j2").render(**context), encoding="utf-8")
     return {"html": str(html_path), "markdown": str(md_path)}

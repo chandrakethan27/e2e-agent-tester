@@ -49,3 +49,44 @@ def test_phase_and_agent_updates(run_dir):
 def test_set_phase_rejects_unknown_status(run_dir):
     with pytest.raises(ValueError):
         set_phase(run_dir, "intake", "exploded")
+
+
+def _git(repo, *args):
+    import subprocess
+
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *args], check=True, capture_output=True)
+
+
+def test_init_neutralizes_imported_git_config(tmp_path, sample_repo):
+    import subprocess
+
+    _git(sample_repo, "init", "-q")
+    _git(sample_repo, "add", "README.md")
+    _git(sample_repo, "commit", "-qm", "init")
+    marker = tmp_path / "pwned"
+    _git(sample_repo, "config", "core.fsmonitor", f"touch {marker}")
+    (sample_repo / ".git" / "hooks" / "post-checkout").write_text("#!/bin/sh\ntouch /tmp/x\n")
+    run_dir = init_run(str(sample_repo), "adopt", "quick", tmp_path / "runs")
+    subprocess.run(["git", "-C", str(run_dir / "repo"), "ls-files"], capture_output=True)
+    assert not marker.exists()
+    assert not (run_dir / "repo" / ".git" / "hooks").exists()
+    assert any(".git" in note for note in load_run(run_dir)["notes"])
+
+
+def test_init_drops_gitdir_redirect_file(tmp_path, sample_repo):
+    (sample_repo / ".git").write_text("gitdir: /etc\n")
+    run_dir = init_run(str(sample_repo), "adopt", "quick", tmp_path / "runs")
+    assert not (run_dir / "repo" / ".git").exists()
+
+
+def test_init_refuses_source_containing_runs_root(tmp_path, sample_repo):
+    with pytest.raises(ValueError, match="runs folder"):
+        init_run(str(sample_repo), "adopt", "quick", sample_repo / "runs")
+
+
+def test_init_stores_source_without_credentials(tmp_path):
+    def fake_fetch(source, dest):
+        dest.mkdir(parents=True)
+
+    run_dir = init_run("https://user:tok@git.example.com/a/b.git", "adopt", "quick", tmp_path / "runs", fetch=fake_fetch)
+    assert "tok" not in (run_dir / "run.json").read_text()

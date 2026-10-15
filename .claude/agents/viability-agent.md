@@ -17,8 +17,8 @@ You are **viability-agent**. Read `.claude/skills/evaluate/references/agent-cont
 Also check dual licensing, CLAs and open-core (enterprise-only features). At depth `deep`, spot-check the licenses of the top 10 runtime dependencies.
 
 ## 2. Project health (dimension viability)
-Use `gh api` for GitHub sources (skip gracefully otherwise) and `GIT_CEILING_DIRECTORIES=$RUN_DIR git -C $RUN_DIR/repo` for history:
-- Maintainers and bus factor: `GIT_CEILING_DIRECTORIES=$RUN_DIR git -C $RUN_DIR/repo shortlog -sn --since='12 months ago' HEAD` → share of the top author; > 80% from one person = bus factor 1.
+Use `gh api` for GitHub sources (skip gracefully otherwise) and `./bin/e2eat git $RUN_DIR` for history:
+- Maintainers and bus factor: `./bin/e2eat git $RUN_DIR shortlog -sn --since='12 months ago' HEAD` → share of the top author; > 80% from one person = bus factor 1.
 - Activity: commits in the last 90 days, last release date, release cadence (`gh api 'repos/<o>/<r>/releases?per_page=20'`).
 - Responsiveness: `gh api 'repos/<o>/<r>/issues?state=closed&per_page=30'` → median days to close (skip entries with `pull_request`), open backlog vs stars.
 - Security process: SECURITY.md, published advisories (`gh api repos/<o>/<r>/security-advisories`), signed releases or provenance.

@@ -7,7 +7,7 @@ tools: Bash, Read, Grep, Glob, Write
 You are **architecture-agent**. Read `.claude/skills/evaluate/references/agent-contract.md` first. Read `recon.json`. Work read-only on `$RUN_DIR/repo`; do not run project code.
 
 ## 1. Map the codebase
-- Size: `GIT_CEILING_DIRECTORIES=$RUN_DIR git -C $RUN_DIR/repo ls-files | wc -l` (or `find` without .git); lines per language, e.g. `GIT_CEILING_DIRECTORIES=$RUN_DIR git -C $RUN_DIR/repo ls-files '*.py' | sed "s|^|$RUN_DIR/repo/|" | xargs wc -l | tail -1`. Skip vendored and generated directories.
+- Size: `./bin/e2eat git $RUN_DIR ls-files | wc -l` (or `find $RUN_DIR/repo -type f -not -path '*/.git/*' | wc -l` when it exits 3); lines per language, e.g. `./bin/e2eat git $RUN_DIR ls-files '*.py' | sed "s|^|$RUN_DIR/repo/|" | xargs wc -l | tail -1`. Skip vendored and generated directories.
 - Structure: top-level modules and their responsibilities, the 10 largest source files, entry points, dependency direction between modules (imports), cycles.
 
 ## 2. Design quality (cite `repo/<file>:<line>`)

@@ -48,10 +48,26 @@ def test_contract_documents_the_finding_format():
         assert word in contract
 
 
-@pytest.mark.parametrize("path", sorted(AGENTS_DIR.glob("*.md")) + [ROOT / ".claude/skills/evaluate/references/agent-contract.md"])
-def test_git_on_repo_is_fenced_to_the_run(path):
-    # runs/ lives inside this tool's own git repo, so a plain `git -C $RUN_DIR/repo` on a source
-    # without .git silently reports the tool's history instead of the evaluated project's.
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if "git -C $RUN_DIR/repo" in line:
-            assert "GIT_CEILING_DIRECTORIES=$RUN_DIR" in line, f"{path.name}: {line.strip()}"
+PROMPTS = sorted(AGENTS_DIR.glob("*.md")) + [ROOT / ".claude/skills/evaluate/references/agent-contract.md", ROOT / ".claude/skills/evaluate/SKILL.md"]
+
+
+@pytest.mark.parametrize("path", PROMPTS)
+def test_git_on_the_repo_goes_through_the_hardened_wrapper(path):
+    # Host git on an evaluated repo can run repo-controlled config (core.fsmonitor) and, without a ceiling,
+    # walks up into this tool's own repo. Only `./bin/e2eat git` is safe.
+    assert "git -C $RUN_DIR/repo" not in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("path", PROMPTS)
+def test_repo_compose_files_are_never_executed(path):
+    text = path.read_text(encoding="utf-8")
+    assert "docker compose -p" not in text and "up -d --build" not in text
+
+
+def test_settings_guard_hook_and_secret_denies():
+    import json
+
+    settings = json.loads((ROOT / ".claude/settings.json").read_text())
+    hooks = settings["hooks"]["PreToolUse"]
+    assert any(h["matcher"] == "Bash" and "e2eat guard" in h["hooks"][0]["command"] for h in hooks)
+    assert "Read(./secrets.env)" in settings["permissions"]["deny"]

@@ -71,8 +71,10 @@ def test_crossexam_round_trip(run_dir):
 
 
 def test_finalize_drops_unanswered_disputes(run_dir):
-    add_finding(run_dir, status="disputed", challenge="Prove it with a transcript.")
-    add_finding(run_dir, id="F-security-002", status="disputed", challenge="Prove it.", rebuttal="ok", conceded=True)
+    add_finding(run_dir)
+    add_finding(run_dir, id="F-security-002", rebuttal="ok", conceded=True)
+    update_finding(run_dir, "F-security-001", status="disputed", challenge="Prove it with a transcript.")
+    update_finding(run_dir, "F-security-002", status="disputed", challenge="Prove it.")
     assert finalize_findings(run_dir) == {"confirmed": 0, "dropped": 2}
 
 
@@ -86,3 +88,30 @@ def test_cli_findings_and_status(run_dir, capsys):
     status = json.loads(capsys.readouterr().out)
     assert status["findings"]["by_status"] == {"open": 1}
     assert status["phases"]["intake"] == "pending"
+
+
+@pytest.mark.parametrize("challenges", [[], {"challenges": [{"challenge": "missing the finding id here"}]}])
+def test_malformed_skeptic_files_are_rejected_before_any_change(run_dir, challenges):
+    add_finding(run_dir)
+    write_json(run_dir / "blackboard/facts/skeptic-challenges.json", challenges)
+    with pytest.raises(ValueError, match="skeptic-challenges"):
+        apply_crossexam(run_dir)
+    assert load_findings(run_dir)[0]["status"] == "open"
+
+
+def test_invalid_ruling_value_changes_nothing(run_dir):
+    add_finding(run_dir)
+    write_json(run_dir / "blackboard/facts/skeptic-rulings.json",
+               {"rulings": [{"finding_id": "F-security-001", "ruling": "open", "reason": "nope"}]})
+    with pytest.raises(ValueError, match="skeptic-rulings"):
+        apply_crossexam(run_dir)
+    assert load_findings(run_dir)[0]["status"] == "open"
+
+
+def test_agents_cannot_self_confirm(run_dir):
+    add_finding(run_dir, status="confirmed", severity="critical")
+    [f] = load_findings(run_dir)
+    assert f["status"] == "open"
+    assert [x["id"] for x in challengeable(load_findings(run_dir), 5)] == ["F-security-001"]
+    update_finding(run_dir, "F-security-001", status="dropped", ruling_reason="false positive")
+    assert load_findings(run_dir)[0]["status"] == "dropped"
