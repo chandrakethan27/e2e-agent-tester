@@ -32,7 +32,7 @@ use-case / anti-use-case recommendations.
 ## 2. Architecture
 
 ```
-/evaluate <github-url | ./path> [--profile adopt|radar|audit] [--depth quick|standard|deep] [--resume <run-id>]
+/evaluate <github-url | git-url | ./path | archive.zip|.tar.gz> [--profile adopt|radar|audit] [--depth quick|standard|deep] [--resume <run-id>]
         │
         ▼
   ORCHESTRATOR skill (main session; runs phases, owns run.json, routes messages)
@@ -62,7 +62,7 @@ Python CLI, `e2eat`, run with `uv run e2eat ...`. LLM agents judge; code compute
 | functional-tester | 2 | Derive user journeys + README claims, execute E2E per project type, record pass/fail with evidence | gstack browse binary, curl, docker exec |
 | suite-runner | 2 | Run the repo's own test suite + coverage inside the container | docker exec |
 | security-agent | 2 | Secret scan, SAST, dependency CVEs, container scan, OWASP review, active verification of top findings against the running app | `e2eat scan` (gitleaks, semgrep, trivy, osv-scanner in Docker), optional `cso` skill |
-| perf-agent | 2 | Latency/throughput/resource usage under load; web vitals for UIs; DB load for databases | gstack browse perf, `oha` in Docker, `docker stats` |
+| perf-agent | 2 | Latency/throughput/resource usage under load; page-load timings for UIs; DB load for databases | `grafana/k6` in Docker on the run network, gstack browse `perf` (wave 2), `docker stats` |
 | architecture-agent | 2 | Design quality, maintainability, tech debt, operability signals (config, logging, metrics, health endpoints) | arxitect review guidance, Read/Grep |
 | viability-agent | 2 | License compatibility, bus factor, release cadence, issue responsiveness, docs quality, alternatives | `gh api`, WebSearch |
 | skeptic-agent | 3 | Challenge findings lacking strong evidence; rule final status | Read |
@@ -78,7 +78,7 @@ Python CLI, `e2eat`, run with `uv run e2eat ...`. LLM agents judge; code compute
 ## 3. Blackboard & data contracts
 
 ```
-runs/<run-id>/                     run-id = <owner>-<repo>-<yyyymmdd-hhmm> (local: <dirname>-<ts>)
+runs/<run-id>/                     run-id = <slug>-<yyyymmdd-hhmmss> UTC; slug = lowercase [a-z0-9-] of owner-repo or dir/archive name
   run.json                         inputs, profile, depth, phases{name:status}, squad, skipped, timings  (orchestrator only)
   repo/                            source (read-only for all agents except runner-agent's Docker files under .e2eat/)
   blackboard/
@@ -94,7 +94,8 @@ runs/<run-id>/                     run-id = <owner>-<repo>-<yyyymmdd-hhmm> (loca
   report.md, report.html           e2eat render
 ```
 
-JSON Schemas live in `schemas/` and are enforced by `e2eat validate`.
+JSON Schemas ship inside the `e2eat` package (`tools/src/e2eat/schemas/`), are printed by `e2eat schema <name>`, and are enforced by `e2eat validate`.
+Cross-exam files: `blackboard/facts/skeptic-challenges.json` (round 1) and `blackboard/facts/skeptic-rulings.json` (round 2).
 
 **finding** (required: id, agent, dimension, severity, title, claim, evidence, confidence, status)
 - `dimension` ∈ functional | security | performance | reliability | maintainability | operability | compliance | viability
@@ -108,12 +109,13 @@ JSON Schemas live in `schemas/` and are enforced by `e2eat validate`.
 
 **recon facts**: project_type, secondary_types[], languages[], frameworks[], package_managers[], entrypoints[], has_dockerfile, has_compose, services_needed[], secrets_needed[], license{spdx, file}, repo_health{stars, forks, contributors, last_commit, open_issues, releases, archived}, claims[] (README claims to verify: {id, text, testable})
 
-**runtime facts**: status ∈ running | failed | static-only, strategy_used, base_urls[], ports[], containers[], network, health{endpoint, ok}, startup_secs, image_size_mb, idle_mem_mb, logs[]
+**runtime facts**: status ∈ running | failed | static-only (`running` = app/CLI/library verified usable in a container), strategy_used, base_urls[] (host, 127.0.0.1), internal_urls[] (on the run network, for load tools), exec_container (container for `docker exec`, or null), ports[], containers[], network, health{endpoint, ok}, startup_secs, image_size_mb, idle_mem_mb, logs[]
 
 ### 3.1 How agents talk
 1. **Facts (broadcast)** — recon and runner publish facts; all Phase 2 agents read them first.
-2. **Questions (directed)** — an agent writes `messages/Q-<nnn>.json` (`to` = agent name). After each Phase 2 wave the orchestrator routes open questions to the target agent (SendMessage if still resumable, else a fresh targeted spawn), writes the answer, then resumes the asker with SendMessage. Max 2 waves; unanswered questions become `expired`.
-3. **Challenges (adversarial)** — skeptic marks findings `disputed` with `challenge`; orchestrator forwards each to the owning agent, which adds evidence (`rebuttal` + new evidence paths) or concedes; skeptic rules `confirmed` / `dropped`. Only critical/high and confidence < 0.6 findings are challenged. Unchallenged findings with valid evidence become `confirmed`.
+2. **Wave 2 (exclusive work)** — the gstack browse daemon is a single shared browser and restarts disturb load tests, so browser timing (perf-agent `$B perf`) and disruptive reliability checks (functional-tester restart/kill/SIGTERM) are deferred: agents list them in their facts, and after wave 1 the orchestrator resumes those agents one at a time to run them.
+3. **Questions (directed)** — an agent writes `messages/Q-<nnn>.json` (`to` = agent name). After each Phase 2 wave the orchestrator routes open questions to the target agent (SendMessage if still resumable, else a fresh targeted spawn), writes the answer, then resumes the asker with SendMessage. Max 2 waves; unanswered questions become `expired`.
+4. **Challenges (adversarial)** — skeptic marks findings `disputed` with `challenge`; orchestrator forwards each to the owning agent, which adds evidence (`rebuttal` + new evidence paths) or concedes; skeptic rules `confirmed` / `dropped`. Only critical/high and confidence < 0.6 findings are challenged. Unchallenged findings with valid evidence become `confirmed`.
 
 ### 3.2 Integrity rules
 - Agents write only their own findings/evidence paths. Facts are write-once per agent.
@@ -135,7 +137,7 @@ JSON Schemas live in `schemas/` and are enforced by `e2eat validate`.
 | project_type | functional-tester | perf-agent | suite-runner | notes |
 |---|---|---|---|---|
 | web-app | browse journeys: load, nav, forms, auth, console/network errors, responsive | page load + web vitals, API latency | yes | |
-| api-service | endpoint tests from OpenAPI/routes: happy path, validation, auth, error codes | `oha` latency p50/p95/p99, error rate at N concurrency | yes | |
+| api-service | endpoint tests from OpenAPI/routes: happy path, validation, auth, error codes | k6 latency p50/p95/p99, error rate at N concurrency | yes | |
 | cli | documented commands, help/version, exit codes, bad input | runtime on sample inputs | yes | |
 | library | run README/examples in container, write smoke script against public API | micro-bench of documented hot path (deep only) | yes | |
 | database | client connect, CRUD, transactions/concurrent increments, restart durability (kill -9 → restart → verify), backup/restore if documented | load test ops/s + p99 at concurrency, compare to documented claims | yes | |
@@ -187,18 +189,26 @@ E2EAgentTester/
   CLAUDE.md  README.md  .gitignore  secrets.env.example
   .claude/
     settings.json
-    commands/evaluate.md
-    skills/evaluate-repo/SKILL.md
-    skills/evaluate-repo/references/{project-types.md, agent-prompts.md}
+    skills/evaluate/SKILL.md                 (/evaluate — the orchestrator)
+    skills/evaluate/references/agent-contract.md   (shared rules every agent reads first)
     agents/{recon-agent, runner-agent, functional-tester, suite-runner, security-agent,
             perf-agent, architecture-agent, viability-agent, skeptic-agent,
             use-case-strategist, report-writer}.md
-  schemas/{run, recon, runtime, finding, message, scores, usecases, report}.schema.json
+  bin/e2eat                                  (uv wrapper; agents call ./bin/e2eat)
   tools/  (uv project "e2eat")
     pyproject.toml
-    src/e2eat/{cli, workspace, validate, sandbox, scan, score, redact, render, doctor}.py
-    src/e2eat/templates/report.html
+    src/e2eat/{paths, jsonio, source, workspace, validate, blackboard, squad, score, redact, render, sandbox, scan, doctor}.py
+    src/e2eat/cli/{__init__, output, run_cmds, blackboard_cmds, report_cmds, sandbox_cmds}.py
+    src/e2eat/schemas/{run, recon, runtime, finding, message, scores, usecases, report, challenges, rulings}.schema.json
+    src/e2eat/templates/{report.html.j2, report.md.j2}
     tests/
   fixtures/{vuln-flask, tiny-cli, broken-build}/  fixtures/EXPECTED.md
   runs/   (gitignored)
 ```
+
+## 11. Revisions during planning
+- `/evaluate` is the skill itself (`.claude/skills/evaluate/`); no separate command file.
+- Inputs also accept generic `https://…/*.git` URLs and `.zip/.tar.gz/.tgz/.tar` archives (safe extraction; single top-level folder unwrapped). Symlinks that escape the fetched repo are removed and noted in run.json.
+- Squad selection is deterministic (`e2eat squad`): runtime agents = functional-tester, suite-runner, perf-agent (dropped when runtime ≠ running); static agents = security, architecture, viability (always).
+- If project agents were created mid-session and are not yet registered, the orchestrator spawns `general-purpose` with "Read .claude/agents/<name>.md and follow it exactly".
+- Host safety is also enforced by `.claude/settings.json` deny rules for host package managers/build tools.
