@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./bin/e2eat:*)",
+      "Bash(docker:*)",
+      "Bash(git clone:*)",
+      "Bash(git -C:*)",
+      "Bash(gh api:*)",
+      "Bash(gh auth status:*)",
+      "Bash(curl:*)",
+      "Bash(uv run --project tools:*)",
+      "WebSearch"
+    ],
+    "deny": [
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(pnpm:*)",
+      "Bash(yarn:*)",
+      "Bash(bun:*)",
+      "Bash(pip:*)",
+      "Bash(pip3:*)",
+      "Bash(pipx:*)",
+      "Bash(poetry:*)",
+      "Bash(python -m pip:*)",
+      "Bash(python3 -m pip:*)",
+      "Bash(cargo:*)",
+      "Bash(go build:*)",
+      "Bash(go run:*)",
+      "Bash(go test:*)",
+      "Bash(mvn:*)",
+      "Bash(gradle:*)",
+      "Bash(bundle:*)",
+      "Bash(make:*)",
+      "Bash(composer:*)",
+      "Bash(dotnet:*)"
+    ]
+  }
+}
