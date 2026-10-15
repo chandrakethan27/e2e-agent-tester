@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "run",
+  "type": "object",
+  "required": ["run_id", "source", "profile", "depth", "budgets", "phases", "squad", "skipped", "agents", "notes"],
+  "properties": {
+    "run_id": {"type": "string", "pattern": "^[a-z0-9-]+-[0-9]{8}-[0-9]{6}$"},
+    "source": {
+      "type": "object",
+      "required": ["raw", "kind", "location"],
+      "properties": {"kind": {"enum": ["git", "dir", "archive"]}}
+    },
+    "profile": {"enum": ["adopt", "radar", "audit"]},
+    "depth": {"enum": ["quick", "standard", "deep"]},
+    "budgets": {"type": "object"},
+    "phases": {"type": "object", "additionalProperties": {"enum": ["pending", "running", "done", "failed", "skipped"]}},
+    "squad": {"type": "array", "items": {"type": "string"}},
+    "skipped": {"type": "object", "additionalProperties": {"type": "string"}},
+    "agents": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {"status": {"enum": ["pending", "running", "done", "failed", "skipped"]}}
+      }
+    },
+    "notes": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "challenges",
+  "type": "object",
+  "required": ["challenges"],
+  "properties": {
+    "challenges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "challenge"],
+        "properties": {
+          "finding_id": {"type": "string", "pattern": "^F-[a-z0-9-]+-[0-9]{3}$"},
+          "challenge": {"type": "string", "minLength": 10}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "report",
+  "type": "object",
+  "required": ["executive_summary", "verdict_rationale", "highlights", "top_risks", "coverage_notes", "next_steps"],
+  "properties": {
+    "executive_summary": {"type": "string", "minLength": 20},
+    "verdict_rationale": {"type": "string"},
+    "highlights": {"type": "array", "items": {"type": "string"}},
+    "top_risks": {"type": "array", "maxItems": 5, "items": {"type": "string", "pattern": "^F-[a-z0-9-]+-[0-9]{3}$"}},
+    "coverage_notes": {"type": "array", "items": {"type": "string"}},
+    "next_steps": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "runtime",
+  "type": "object",
+  "required": ["status", "strategy_used", "base_urls", "internal_urls", "exec_container", "containers", "network", "health", "logs"],
+  "properties": {
+    "status": {"enum": ["running", "failed", "static-only"]},
+    "strategy_used": {"enum": ["repo-docker", "generated-dockerfile", "toolchain-image", "none"]},
+    "base_urls": {"type": "array", "items": {"type": "string", "pattern": "^http://(127\\.0\\.0\\.1|localhost):[0-9]+"}},
+    "internal_urls": {"type": "array", "items": {"type": "string"}},
+    "exec_container": {"type": ["string", "null"]},
+    "ports": {"type": "array", "items": {"type": "integer"}},
+    "containers": {"type": "array", "items": {"type": "string"}},
+    "network": {"type": ["string", "null"]},
+    "health": {
+      "type": "object",
+      "required": ["ok"],
+      "properties": {"endpoint": {"type": ["string", "null"]}, "ok": {"type": "boolean"}}
+    },
+    "startup_secs": {"type": ["number", "null"]},
+    "image_size_mb": {"type": ["number", "null"]},
+    "idle_mem_mb": {"type": ["number", "null"]},
+    "logs": {"type": "array", "items": {"type": "string"}}
+  }
+}

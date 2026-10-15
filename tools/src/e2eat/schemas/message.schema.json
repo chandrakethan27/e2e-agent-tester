@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "message",
+  "type": "object",
+  "required": ["id", "from", "to", "question", "answer", "status"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^Q-[a-z0-9-]+-[0-9]{3}$"},
+    "from": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+    "to": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+    "question": {"type": "string", "minLength": 3},
+    "answer": {"type": ["string", "null"]},
+    "status": {"enum": ["open", "answered", "expired"]}
+  }
+}

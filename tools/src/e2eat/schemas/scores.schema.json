@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "scores",
+  "type": "object",
+  "required": ["profile", "overall", "verdict", "coverage_pct", "dimensions", "gates", "counts"],
+  "properties": {
+    "profile": {"enum": ["adopt", "radar", "audit"]},
+    "overall": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
+    "verdict": {"type": "string"},
+    "coverage_pct": {"type": "integer", "minimum": 0, "maximum": 100},
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["score", "covered", "weight", "findings"],
+        "properties": {
+          "score": {"type": ["integer", "null"]},
+          "covered": {"type": "boolean"},
+          "weight": {"type": "number"},
+          "findings": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "gates": {"type": "array", "items": {"type": "string"}},
+    "counts": {"type": "object"}
+  }
+}

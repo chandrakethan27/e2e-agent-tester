@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "recon",
+  "type": "object",
+  "required": ["project_type", "secondary_types", "languages", "frameworks", "entrypoints", "has_dockerfile",
+               "has_compose", "services_needed", "secrets_needed", "license", "repo_health", "claims",
+               "run_hints", "test_hints"],
+  "properties": {
+    "project_type": {"$ref": "#/$defs/project_type"},
+    "secondary_types": {"type": "array", "items": {"$ref": "#/$defs/project_type"}},
+    "languages": {"type": "array", "items": {"type": "string"}},
+    "frameworks": {"type": "array", "items": {"type": "string"}},
+    "package_managers": {"type": "array", "items": {"type": "string"}},
+    "entrypoints": {"type": "array", "items": {"type": "string"}},
+    "has_dockerfile": {"type": "boolean"},
+    "has_compose": {"type": "boolean"},
+    "openapi": {"type": ["string", "null"]},
+    "services_needed": {"type": "array", "items": {"type": "string"}},
+    "secrets_needed": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"}},
+    "license": {
+      "type": "object",
+      "required": ["spdx", "file"],
+      "properties": {"spdx": {"type": ["string", "null"]}, "file": {"type": ["string", "null"]}}
+    },
+    "repo_health": {"type": "object"},
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "testable"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^C-[0-9]{3}$"},
+          "text": {"type": "string", "minLength": 3},
+          "testable": {"type": "boolean"}
+        }
+      }
+    },
+    "run_hints": {"type": "array", "items": {"type": "string"}},
+    "test_hints": {"type": "array", "items": {"type": "string"}},
+    "summary": {"type": "string"}
+  },
+  "$defs": {
+    "project_type": {"enum": ["web-app", "api-service", "cli", "library", "database", "ai-app", "data-pipeline",
+                              "infra-tool", "mobile", "unknown"]}
+  }
+}
