@@ -87,7 +87,7 @@ def challengeable(findings: list[dict], limit: int) -> list[dict]:
     picked = [
         f for f in findings
         if f.get("status") == "open"
-        and (f.get("severity") in ("critical", "high") or f.get("confidence", 1) < CHALLENGE_CONFIDENCE)
+        and (f.get("severity") in ("critical", "high") or f.get("confidence", 1) <= CHALLENGE_CONFIDENCE)
     ]
     picked.sort(key=lambda f: (severity_rank(f), f.get("confidence", 1), f["id"]))
     return picked[:limit]
@@ -98,6 +98,14 @@ def _finding_path(run_dir: Path, finding_id: str) -> Path:
     if not _FINDING_ID.match(finding_id) or not path.exists():
         raise ValueError(f"unknown finding {finding_id!r}")
     return path
+
+
+def _ledger_update(run_dir: Path, finding_id: str, **fields) -> None:
+    """Record orchestrator-owned facts about a finding in the ledger only (never in the agent's own file)."""
+    with run_lock(run_dir):
+        ledger = _status_ledger(run_dir)
+        ledger[finding_id] = ledger.get(finding_id, {}) | fields
+        write_json(Path(run_dir) / STATUS_FILE, ledger)
 
 
 def update_finding(run_dir: Path, finding_id: str, **fields) -> dict:
@@ -123,19 +131,22 @@ def apply_crossexam(run_dir: Path) -> dict[str, int]:
     challenges = _crossexam_items(facts / "skeptic-challenges.json", "challenges")
     rulings = _crossexam_items(facts / "skeptic-rulings.json", "rulings")  # both checked before anything changes
     status = {f["id"]: f["status"] for f in load_findings(run_dir)}
-    counts = {"disputed": 0, "confirmed": 0, "dropped": 0, "unknown": 0}
+    counts = {"disputed": 0, "confirmed": 0, "dropped": 0, "unknown": 0, "ignored": 0}
     for item in challenges:
         if item["finding_id"] not in status:
             counts["unknown"] += 1
         elif status[item["finding_id"]] == "open":
             update_finding(run_dir, item["finding_id"], status="disputed", challenge=item["challenge"])
             counts["disputed"] += 1
+    status = {f["id"]: f["status"] for f in load_findings(run_dir)}
     for item in rulings:
         if item["finding_id"] not in status:
             counts["unknown"] += 1
-            continue
-        update_finding(run_dir, item["finding_id"], status=item["ruling"], ruling_reason=item["reason"])
-        counts[item["ruling"]] += 1
+        elif status[item["finding_id"]] != "disputed":
+            counts["ignored"] += 1  # a ruling only means something for a finding the skeptic actually challenged
+        else:
+            update_finding(run_dir, item["finding_id"], status=item["ruling"], ruling_reason=item["reason"])
+            counts[item["ruling"]] += 1
     return counts
 
 
@@ -149,16 +160,44 @@ def _crossexam_items(path: Path, kind: str) -> list[dict]:
     return data[kind]
 
 
-def finalize_findings(run_dir: Path) -> dict[str, int]:
-    """Close cross-examination: open → confirmed; unruled disputes stand only if rebutted and not conceded."""
-    counts = {"confirmed": 0, "dropped": 0}
-    for f in load_findings(run_dir):
+UNRULED_MODES = ("block", "keep", "drop")
+
+
+def finalize_findings(run_dir: Path, unruled: str = "block") -> dict[str, int]:
+    """Close cross-examination: open → confirmed. A challenged finding needs a skeptic ruling; without one the call
+    refuses (block), or settles it explicitly: keep (stands if rebutted and not conceded) or drop. Severity and
+    dimension are frozen into the ledger so later edits of an agent's file cannot move a score."""
+    if unruled not in UNRULED_MODES:
+        raise ValueError(f"unruled must be one of {', '.join(UNRULED_MODES)}")
+    findings = load_findings(run_dir)
+    disputed = [f for f in findings if f.get("status") == "disputed"]
+    if disputed and unruled == "block":
+        ids = ", ".join(f["id"] for f in disputed[:5])
+        raise ValueError(f"{len(disputed)} challenged finding(s) have no skeptic ruling ({ids}); rerun skeptic round 2, "
+                         "or settle them explicitly with --unruled keep|drop")
+    never_challenged = {f["id"] for f in challengeable(findings, limit=len(findings))}  # eligible, yet still open
+    counts = {"confirmed": 0, "dropped": 0, "unreviewed": 0}
+    unreviewed_ids: set[str] = set()
+    for f in findings:
         if f.get("status") == "open":
             update_finding(run_dir, f["id"], status="confirmed")
             counts["confirmed"] += 1
+            unreviewed = f["id"] in never_challenged
         elif f.get("status") == "disputed":
-            keep = bool(f.get("rebuttal")) and not f.get("conceded", False)
-            reason = "rebuttal stood without a skeptic ruling" if keep else "challenge unanswered or conceded"
+            keep = unruled == "keep" and bool(f.get("rebuttal")) and not f.get("conceded", False)
+            reason = "rebuttal stood without a skeptic ruling" if keep else "challenge unanswered, conceded or unruled"
             update_finding(run_dir, f["id"], status="confirmed" if keep else "dropped", ruling_reason=f.get("ruling_reason") or reason)
             counts["confirmed" if keep else "dropped"] += 1
+            unreviewed = keep
+        else:
+            continue
+        if unreviewed:
+            counts["unreviewed"] += 1
+            unreviewed_ids.add(f["id"])
+    final = {f["id"]: f for f in load_findings(run_dir)}
+    for f in findings:
+        now = final[f["id"]]
+        if now.get("status") == "confirmed":
+            extra = {"reviewed": False} if f["id"] in unreviewed_ids else {}
+            _ledger_update(run_dir, f["id"], severity=now.get("severity"), dimension=now.get("dimension"), **extra)
     return counts

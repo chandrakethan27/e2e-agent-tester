@@ -28,8 +28,10 @@ from helpers import add_finding, write_json
 def test_evidence_href(run_dir, ref, href):
     evidence = run_dir / "blackboard/evidence"
     evidence.mkdir(parents=True, exist_ok=True)
-    (evidence / "x.log").write_text("x")
+    (evidence / "x.log").write_text("x\n" * 5)
     (evidence / "javascript:alert(1)").write_text("x")
+    (run_dir / "repo" / "src").mkdir(parents=True, exist_ok=True)
+    (run_dir / "repo" / "src" / "app.py").write_text("x = 1\n" * 20)
     assert evidence_href(run_dir, ref) == href
 
 

@@ -49,8 +49,34 @@ def test_evidence_must_exist_inside_run(run_dir, ref, problem):
 
 
 def test_repo_line_references_are_accepted(run_dir):
+    (run_dir / "repo" / "README.md").write_text("a\nb\nc\n")
     add_finding(run_dir, with_evidence=False, evidence=["repo/src/app.py:1", "repo/README.md#L1-L3"])
     assert validate_run(run_dir, check_evidence=True) == []
+
+
+@pytest.mark.parametrize("ref", ["repo/README.md:4", "repo/README.md#L2-L9", "repo/README.md:0", "repo/README.md#L3-L1"])
+def test_cited_lines_must_exist(run_dir, ref):
+    (run_dir / "repo" / "README.md").write_text("a\nb\nc\n")
+    add_finding(run_dir, with_evidence=False, evidence=[ref])
+    assert any("evidence cites line" in i.message for i in validate_run(run_dir, check_evidence=True))
+
+
+def test_line_check_skips_binary_files(run_dir):
+    (run_dir / "repo" / "x.bin").write_bytes(b"\0\1\2")
+    add_finding(run_dir, with_evidence=False, evidence=["repo/x.bin:99"])
+    assert validate_run(run_dir, check_evidence=True) == []
+
+
+def test_agent_facts_need_a_consistent_coverage_block(run_dir):
+    facts = run_dir / "blackboard" / "facts" / "perf-agent.json"
+    write_json(facts, {"p50_ms": 12})
+    assert any("coverage" in i.message for i in validate_run(run_dir))
+    write_json(facts, {"coverage": {"performance": {"planned": 2, "run": 3}}})
+    assert any("exceeds planned" in i.message for i in validate_run(run_dir))
+    write_json(facts, {"coverage": {"speed": {"planned": 1, "run": 1}}})
+    assert validate_run(run_dir)
+    write_json(facts, {"coverage": {"performance": {"planned": 3, "run": 2, "blocked": 1}}, "untested": [{"what": "soak", "why": "time"}]})
+    assert validate_run(run_dir) == []
 
 
 def test_id_must_match_file_and_agent(run_dir):

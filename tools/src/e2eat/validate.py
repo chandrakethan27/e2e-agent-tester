@@ -14,10 +14,11 @@ from typing import Iterator
 
 from jsonschema import Draft202012Validator
 
-SCHEMA_NAMES = ("run", "recon", "runtime", "finding", "message", "scores", "usecases", "report", "challenges", "rulings", "briefing", "ledger")
+SCHEMA_NAMES = ("run", "recon", "runtime", "finding", "message", "scores", "usecases", "report", "challenges", "rulings", "briefing", "ledger", "agentfacts")
 TOP_LEVEL = {"run.json": "run", "scores.json": "scores", "usecases.json": "usecases", "report.json": "report", "finding-status.json": "ledger"}
+AGENT_FACTS = ("functional-tester", "suite-runner", "security-agent", "perf-agent", "architecture-agent", "viability-agent")
 FACTS = {"recon.json": "recon", "runtime.json": "runtime", "briefing.json": "briefing",
-         "skeptic-challenges.json": "challenges", "skeptic-rulings.json": "rulings"}
+         "skeptic-challenges.json": "challenges", "skeptic-rulings.json": "rulings"} | {f"{a}.json": "agentfacts" for a in AGENT_FACTS}
 QUARANTINABLE = ("finding", "message")
 LINE_SUFFIX = re.compile(r"(#L?\d+(-L?\d+)?|:\d+(-\d+)?)$")
 
@@ -42,6 +43,34 @@ def validate_document(data: object, kind: str) -> list[str]:
     return [f"{'/'.join(str(p) for p in e.absolute_path) or '<root>'}: {e.message}" for e in errors]
 
 
+MAX_LINE_CHECK_BYTES = 8 * 1024 * 1024
+
+
+def _line_problem(path: Path, ref: str, suffix: str) -> str | None:
+    """A cited line (range) must exist in the file. Binary and very large files are not checked."""
+    numbers = [int(n) for n in re.findall(r"\d+", suffix)]
+    try:
+        if not path.is_file() or path.stat().st_size > MAX_LINE_CHECK_BYTES:
+            return None
+        data = path.read_bytes()
+    except OSError:
+        return None
+    if b"\0" in data[:8192]:
+        return None
+    lines = data.count(b"\n") + (0 if not data or data.endswith(b"\n") else 1)
+    if min(numbers) < 1 or max(numbers) > lines or numbers != sorted(numbers):
+        return f"evidence cites line(s) {suffix.lstrip('#:')} but the file has {lines}: {ref}"
+    return None
+
+
+def _coverage_problems(data: object) -> list[str]:
+    block = data.get("coverage") if isinstance(data, dict) else None
+    if not isinstance(block, dict):
+        return []
+    return [f"coverage/{dim}: run ({e['run']}) exceeds planned ({e['planned']})"
+            for dim, e in block.items() if isinstance(e, dict) and isinstance(e.get("run"), int) and isinstance(e.get("planned"), int) and e["run"] > e["planned"]]
+
+
 def evidence_problem(run_dir: Path, ref: str) -> str | None:
     target = LINE_SUFFIX.sub("", ref)
     if not target or Path(target).is_absolute():
@@ -53,6 +82,8 @@ def evidence_problem(run_dir: Path, ref: str) -> str | None:
             return f"evidence escapes the run dir: {ref}"
         if not path.exists():
             return f"evidence not found: {ref}"
+        if (m := LINE_SUFFIX.search(ref)) and target != ref:
+            return _line_problem(path, ref, m.group(0))
     except (ValueError, OSError, RuntimeError):  # RuntimeError: symlink loop
         return f"evidence path is invalid: {ref!r}"
     return None
@@ -75,6 +106,8 @@ def validate_file(run_dir: Path, rel: Path, kind: str, check_evidence: bool = Fa
     except OSError as exc:
         return [f"unreadable: {exc}"]
     errors = validate_document(data, kind)
+    if kind in ("agentfacts", "runtime"):
+        errors += _coverage_problems(data)
     if errors or kind not in QUARANTINABLE:
         return errors
     errors = _identity_problems(data, kind, rel.stem)

@@ -53,8 +53,10 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("run_dir", type=Path)
     p.set_defaults(handler=_apply_crossexam)
 
-    p = sub.add_parser("finalize-findings", help="close cross-examination: open → confirmed, unresolved disputes settled")
+    p = sub.add_parser("finalize-findings", help="close cross-examination: open → confirmed; refuses while challenged findings lack a ruling")
     p.add_argument("run_dir", type=Path)
+    p.add_argument("--unruled", choices=("block", "keep", "drop"), default="block",
+                   help="what to do with challenged findings that have no skeptic ruling (default: refuse)")
     p.set_defaults(handler=_finalize)
 
     p = sub.add_parser("status", help="phases, squad, agents, finding and message counts")
@@ -97,7 +99,7 @@ def _apply_crossexam(args: argparse.Namespace) -> int:
 
 
 def _finalize(args: argparse.Namespace) -> int:
-    emit(finalize_findings(args.run_dir))
+    emit(finalize_findings(args.run_dir, args.unruled))
     return 0
 
 

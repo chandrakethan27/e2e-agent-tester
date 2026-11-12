@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agentfacts",
+  "type": "object",
+  "required": [
+    "coverage"
+  ],
+  "properties": {
+    "coverage": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "functional",
+          "security",
+          "performance",
+          "reliability",
+          "maintainability",
+          "operability",
+          "compliance",
+          "viability"
+        ]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "planned",
+          "run"
+        ],
+        "properties": {
+          "planned": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "run": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "blocked": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "untested": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "what",
+          "why"
+        ],
+        "properties": {
+          "what": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
