@@ -2,18 +2,37 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Sequence
 
+from .paths import run_env_file
+
 LABEL = "e2eat.run"
-LIMITS = ("--cpus", "2", "--memory", "4g", "--pids-limit", "1024", "--security-opt", "no-new-privileges")
+# Capabilities a typical service image legitimately needs; everything else is dropped.
+_CAPS = ("CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID", "NET_BIND_SERVICE", "KILL")
+CAP_ARGS = ("--cap-drop", "ALL", *(arg for cap in _CAPS for arg in ("--cap-add", cap)))
+LIMITS = ("--cpus", "2", "--memory", "4g", "--pids-limit", "1024", "--security-opt", "no-new-privileges", *CAP_ARGS)
 UNSAFE_FLAGS = re.compile(
-    r"--privileged|(?:--net(?:work)?|--pid|--ipc|--userns|--uts)[= ]host\b|--cap-add[= ](?:ALL|SYS_ADMIN)\b|docker\.sock"
+    r"--privileged"
+    r"|(?:--net(?:work)?|--pid|--ipc|--userns|--uts|--cgroupns)[= ](?:host|container:\S+)"
+    r"|--cap-add[= ](?!(?:CAP_)?(?:" + "|".join(_CAPS) + r")\b)"
+    r"|--device\b"
+    r"|--security-opt[= ]\S*(?:unconfined|disable)"
+    r"|docker\.sock",
+    re.IGNORECASE,
 )
 NAMED_VOLUME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+IMAGE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/:@+-]{0,200}$")  # never starts with "-", so it cannot be read as a docker option
+CONTAINER_NAME = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,40}$")
+ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+MOUNT_TARGET = re.compile(r"^/[A-Za-z0-9_./-]*$")
+# Bind mounts are only allowed from these places inside the run dir; the repo and generated config are read-only.
+READ_ONLY_ROOTS = ("repo", "runtime-config")
+WRITABLE_ROOTS = ("blackboard/evidence",)
 _PORT = re.compile(r"^(\d{1,5})(?::(\d{1,5}))?$")
 _RUN_STAMP = re.compile(r"-(\d{8}-\d{6})$")
 
@@ -34,6 +53,10 @@ def container_name(run_id: str, name: str) -> str:
 
 def compose_project(run_id: str) -> str:
     return f"e2eat-{run_id}"
+
+
+def volume_name(run_id: str, name: str) -> str:
+    return f"e2eat-{run_id}-{name}"
 
 
 def image_tag(run_id: str, name: str = "app") -> str:
@@ -63,15 +86,32 @@ def _inside(run_dir: Path, path: Path) -> bool:
     return Path(path).resolve().is_relative_to(Path(run_dir).resolve())
 
 
-def _check_volume(spec: str, run_dir: Path) -> None:
+def _volume_args(spec: str, run_dir: Path, run_id: str) -> list[str]:
+    """Turn a -v spec into docker arguments. Named volumes become labelled, per-run volumes; bind mounts must come from
+    an allowed place inside the run dir (the repo and runtime-config read-only, evidence writable)."""
     source, _, rest = spec.partition(":")
+    target, _, opts = rest.partition(":")
+    options = [o for o in opts.split(",") if o]
+    if not MOUNT_TARGET.match(target):
+        raise ValueError(f"volume needs an absolute container path like SRC:/path[:ro]: {spec}")
     if NAMED_VOLUME.match(source):
-        return  # named volume
-    if "$" in source or not _inside(run_dir, Path(source)):
-        raise ValueError(f"bind mounts must come from inside the run dir: {spec}")
-    options = rest.partition(":")[2].split(",")
-    if _inside(Path(run_dir) / "repo", Path(source)) and "ro" not in options:
-        raise ValueError(f"mounts of the evaluated repo must be read-only (append :ro): {spec}")
+        mount = f"type=volume,src={volume_name(run_id, source)},dst={target},volume-label={LABEL}={run_id}"
+        return ["--mount", mount + (",readonly" if "ro" in options else "")]
+    if "$" in source or not os.path.isabs(source):
+        raise ValueError(f"bind mounts must be absolute paths inside the run dir: {spec}")
+    try:
+        resolved = Path(source).resolve()
+        base = Path(run_dir).resolve()
+    except (OSError, RuntimeError) as exc:
+        raise ValueError(f"cannot resolve mount source {source}: {exc}") from exc
+    for roots, writable in ((READ_ONLY_ROOTS, False), (WRITABLE_ROOTS, True)):
+        for root in roots:
+            if resolved.is_relative_to(base / root):
+                if not writable and "ro" not in options:
+                    raise ValueError(f"mounts of {root}/ must be read-only (append :ro): {spec}")
+                return ["-v", f"{source}:{target}" + (f":{opts}" if opts else "")]
+    allowed = ", ".join([*READ_ONLY_ROOTS, *WRITABLE_ROOTS])
+    raise ValueError(f"bind mounts are only allowed from {allowed} inside the run dir: {spec}")
 
 
 def check_build_inputs(run_dir: Path, context: Path, dockerfile: Path | None) -> None:
@@ -97,21 +137,23 @@ def run_cmd(
     joined = " ".join(extra)
     if UNSAFE_FLAGS.search(joined) or any("docker.sock" in v for v in volumes):
         raise ValueError(f"refusing unsafe docker options: {joined or ', '.join(volumes)}")
-    for volume in volumes:
-        _check_volume(volume, run_dir)
+    if not IMAGE_REF.match(image):
+        raise ValueError(f"bad image reference {image!r}")
+    if not CONTAINER_NAME.match(name):
+        raise ValueError(f"bad container name {name!r}; use lowercase letters, digits, '_', '.', '-'")
+    mounts = [arg for volume in volumes for arg in _volume_args(volume, Path(run_dir), run_id)]
     cmd = ["docker", "run", "-d" if detach else "--rm", "--name", container_name(run_id, name),
            "--label", f"{LABEL}={run_id}", "--network", network_name(run_id), "--network-alias", name, *LIMITS]
     for spec in ports:
         cmd += ["-p", _port_mapping(spec)]
     for pair in env:
-        if "=" not in pair:
-            raise ValueError(f"env must be KEY=VALUE: {pair!r}")
+        key, sep, _ = pair.partition("=")
+        if not sep or not ENV_KEY.match(key):
+            raise ValueError(f"env must be KEY=VALUE with a plain variable name: {pair!r}")
         cmd += ["-e", pair]
     if env_file:
         cmd += ["--env-file", str(env_file)]
-    for volume in volumes:
-        cmd += ["-v", volume]
-    return [*cmd, *extra, image, *command]
+    return [*cmd, *mounts, *extra, image, *command]
 
 
 def _text(value: str | bytes | None) -> str:
@@ -157,8 +199,9 @@ def teardown(run_id: str, run_dir: Path | None = None, keep_images: bool = False
         if found:
             runner([*remove_cmd, *found])
             removed[kind] = len(found)
+    run_env_file(run_id).unlink(missing_ok=True)
     if run_dir is not None:
-        (Path(run_dir) / ".secrets.env").unlink(missing_ok=True)
+        (Path(run_dir) / ".secrets.env").unlink(missing_ok=True)  # written there by older versions
     return removed
 
 
@@ -180,11 +223,14 @@ def stale_run_ids(now: datetime | None = None, max_age_hours: float = 6, runner:
     return sorted(rid for rid in seen if (started := run_started_at(rid)) and now - started > cutoff)
 
 
-def write_run_env(run_dir: Path, needed: Sequence[str], secrets: dict[str, str]) -> dict:
-    """Write only the secrets this project needs into RUN_DIR/.secrets.env (mode 600) for --env-file."""
+def write_run_env(dest: Path, needed: Sequence[str], secrets: dict[str, str]) -> dict:
+    """Write only the secrets this project needs to `dest` (mode 600, created atomically) for --env-file."""
     present = [key for key in needed if secrets.get(key) and "\n" not in secrets[key]]
     missing = [key for key in needed if key not in present]
-    path = Path(run_dir) / ".secrets.env"
-    path.write_text("".join(f"{key}={secrets[key]}\n" for key in present), encoding="utf-8")
-    path.chmod(0o600)
-    return {"env_file": str(path.resolve()), "present": present, "missing": missing}
+    dest = Path(dest)
+    dest.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write("".join(f"{key}={secrets[key]}\n" for key in present))
+    dest.chmod(0o600)
+    return {"env_file": str(dest.resolve()), "present": present, "missing": missing}

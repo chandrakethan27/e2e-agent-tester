@@ -17,6 +17,12 @@ HARDENING = (
     "-c", "core.sshCommand=false",
     "-c", "credential.helper=",
     "-c", "protocol.allow=never",
+    "-c", "core.editor=false",
+    "-c", "core.attributesFile=/dev/null",
+    "-c", "log.showSignature=false",
+    "-c", "gpg.program=false",
+    "-c", "gpg.ssh.program=false",
+    "-c", "gpg.x509.program=false",
 )
 
 
@@ -25,11 +31,15 @@ def git_cmd(run_dir: Path, args: Sequence[str]) -> list[str]:
         raise ValueError(f"git subcommand must be one of {', '.join(ALLOWED_SUBCOMMANDS)}")
     if any(arg.startswith(FORBIDDEN_OPTIONS) for arg in args[1:]):
         raise ValueError(f"git options {', '.join(FORBIDDEN_OPTIONS)} are not allowed")
-    return ["git", "--no-pager", *HARDENING, "-C", str(Path(run_dir).resolve() / "repo"), *args]
+    sub, rest = args[0], list(args[1:])
+    if sub == "log":  # a planted .git/config or .gitattributes could otherwise run a textconv/external diff program
+        rest = ["--no-textconv", "--no-ext-diff", *rest]
+    return ["git", "--no-pager", *HARDENING, "-C", str(Path(run_dir).resolve() / "repo"), sub, *rest]
 
 
 def git_env(run_dir: Path) -> dict[str, str]:
-    return os.environ | {
+    clean = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}  # no inherited GIT_DIR, GIT_EXEC_PATH, ...
+    return clean | {
         "GIT_CEILING_DIRECTORIES": str(Path(run_dir).resolve()),  # never walk up into the tool's own repo
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_CONFIG_GLOBAL": os.devnull,

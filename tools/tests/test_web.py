@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 
-from e2eat.guard import check_command
 from e2eat.web import CONTAINER, IMAGE, build_cmd, open_url, run_cmd, start, stop
 
 
@@ -16,7 +15,6 @@ def test_run_mounts_only_runs_read_only_on_loopback(tmp_path):
     assert "no-new-privileges" in " ".join(cmd) and "ALL" in cmd
     assert "DEFAULT_RUN_ID=r-1" in cmd
     assert cmd[-1] == IMAGE
-    assert check_command(" ".join(cmd), tmp_path) is None  # the project's own guard accepts it
 
 
 @pytest.mark.parametrize("port", [0, 70000, -1])

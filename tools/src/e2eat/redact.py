@@ -8,7 +8,8 @@ from typing import Any
 
 MIN_SECRET_LEN = 4  # shorter values would shred ordinary text
 NOT_SECRETS = {"true", "false", "null", "none", "yes", "no", "on", "off"}  # config literals, not credentials
-OUTPUT_FILES = ("run.json", "scores.json", "usecases.json", "report.json", "report.md", "report.html")
+OUTPUT_FILES = ("run.json", "scores.json", "finding-status.json", "usecases.json", "report.json", "report.md", "report.html")
+EXTRA_DIRS = ("runtime-config", "repo/.e2eat")  # files agents generate outside the blackboard
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
@@ -94,5 +95,7 @@ def _redact_file(path: Path, secrets: dict[str, str]) -> bool:
 def redact_run(run_dir: Path, secrets: dict[str, str]) -> list[str]:
     run_dir = Path(run_dir)
     candidates = [p for p in sorted((run_dir / "blackboard").rglob("*")) if p.is_file() and not p.is_symlink()]
+    for extra in EXTRA_DIRS:
+        candidates += [p for p in sorted((run_dir / extra).rglob("*")) if p.is_file() and not p.is_symlink()]
     candidates += [run_dir / name for name in OUTPUT_FILES if (run_dir / name).is_file()]
     return [p.relative_to(run_dir).as_posix() for p in candidates if _redact_file(p, secrets)]

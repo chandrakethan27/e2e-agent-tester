@@ -52,12 +52,12 @@ If the orchestrator forwards a challenge on one of your findings, either:
 Never change `status` yourself.
 
 ## Safety rules (non-negotiable)
-- Never run the evaluated project's code, package managers, or build tools on the host. Use containers only: `./bin/e2eat sandbox …`, `docker exec`, or `docker run --label e2eat.run=<run-id> …`.
+- Never run the evaluated project's code, package managers, or build tools on the host. Use containers only, through `./bin/e2eat sandbox build|run` (services, load tests, test runs) and `docker exec`/`docker logs`/`docker stats` on `e2eat-<run-id>-*` containers. Raw `docker run`, `docker create`, `docker build`, `docker compose` and `docker volume/network create` are blocked by the guard.
 - Send traffic only to `127.0.0.1`/`localhost` or containers on the run network. Never probe third-party hosts.
 - Active security checks use harmless proofs (read-only queries, marker strings). No destructive payloads.
 - Run git on the evaluated code only through `./bin/e2eat git $RUN_DIR <log|shortlog|rev-list|ls-files|rev-parse> …` — hardened and read-only; it exits 3 when the source has no history. Raw git there can execute repo-controlled config, and for sources without history it would read this tool's own repo.
 - Never run the evaluated repo's compose files, and never read `secrets.env` yourself. A guard hook blocks these, external `curl`/`wget`, and bind mounts from outside `runs/`; if it blocks you, change approach rather than working around it.
-- Never print or copy secret values. `$RUN_DIR/.secrets.env` exists only for `--env-file`.
+- Never print or copy secret values. The per-run env file (outside `runs/`, created by `sandbox env`) exists only for `sandbox run --secrets`.
 - Stay within BUDGETS. If you run out of time, write what you have.
 
 ## Finish

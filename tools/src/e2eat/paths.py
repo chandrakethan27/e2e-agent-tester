@@ -18,3 +18,12 @@ def runs_root() -> Path:
 
 def secrets_file() -> Path:
     return home() / "secrets.env"
+
+
+def secrets_dir() -> Path:
+    """Per-run env files live here, outside runs/ so the live-view container and run artifacts never see them."""
+    return home() / ".secrets.d"
+
+
+def run_env_file(run_id: str) -> Path:
+    return secrets_dir() / f"{run_id}.env"

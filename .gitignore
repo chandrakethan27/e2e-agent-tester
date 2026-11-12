@@ -10,3 +10,6 @@ tools/.venv/
 web/node_modules
 web/.next
 web/next-env.d.ts
+
+# per-run env files (secrets)
+.secrets.d/

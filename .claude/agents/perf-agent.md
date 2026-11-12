@@ -28,7 +28,7 @@ export default function () {
 }
 ```
 3. Warm up once at 2 VUs for 5 s, then run with BUDGETS.load_concurrency VUs for BUDGETS.load_seconds:
-`docker run --rm --label e2eat.run=<run-id> --network <network> -v $RUN_DIR/blackboard/evidence/perf-agent:/work -e VUS=<n> -e DURATION=<s>s -e TARGETS='["http://app:5000/products"]' grafana/k6:0.54.0 run --summary-export=/work/k6-summary.json /work/load.js > $RUN_DIR/blackboard/evidence/perf-agent/k6.log 2>&1`
+`./bin/e2eat sandbox run $RUN_DIR --name k6 --image grafana/k6:0.54.0 --foreground --timeout <seconds> -v $RUN_DIR/blackboard/evidence/perf-agent:/work -e VUS=<n> -e DURATION=<s>s -e 'TARGETS=["http://app:5000/products"]' --log $RUN_DIR/blackboard/evidence/perf-agent/k6.log -- run --summary-export=/work/k6-summary.json /work/load.js`
 4. While it runs, sample `docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}'` for the app containers three times into `blackboard/evidence/perf-agent/stats.log`.
 
 ## CLI / library / data-pipeline

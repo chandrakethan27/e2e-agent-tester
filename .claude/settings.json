@@ -12,6 +12,8 @@
       "WebSearch"
     ],
     "deny": [
+      "Read(**/secrets.env)",
+      "Read(**/.secrets.env)",
       "Read(./secrets.env)",
       "Bash(npm:*)",
       "Bash(npx:*)",
@@ -42,13 +44,26 @@
       "Bash(./mvnw:*)",
       "Bash(rake:*)",
       "Bash(tox:*)",
-      "Bash(pytest:*)"
+      "Bash(pytest:*)",
+      "Bash(python3 runs/:*)",
+      "Bash(python runs/:*)",
+      "Bash(bash runs/:*)",
+      "Bash(sh runs/:*)"
     ]
   },
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/bin/e2eat guard"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Write|Edit|MultiEdit|NotebookEdit|Grep|Glob",
         "hooks": [
           {
             "type": "command",

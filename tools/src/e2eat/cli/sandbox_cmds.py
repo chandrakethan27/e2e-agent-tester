@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ..jsonio import read_json
-from ..paths import secrets_file
+from ..jsonio import read_json, read_json_or
+from ..paths import run_env_file, secrets_file
 from ..redact import parse_env_file
 from ..sandbox import (
     LABEL,
@@ -55,14 +55,14 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("-p", "--port", action="append", default=[], help="CONTAINER or HOST:CONTAINER (bound to 127.0.0.1)")
     p.add_argument("-e", "--env", action="append", default=[], help="non-secret KEY=VALUE")
     p.add_argument("-v", "--volume", action="append", default=[], help="named volume or bind mount from inside the run dir")
-    p.add_argument("--secrets", action="store_true", help="pass RUN_DIR/.secrets.env (create it with `sandbox env`)")
+    p.add_argument("--secrets", action="store_true", help="pass the per-run env file (create it with `sandbox env`)")
     p.add_argument("--foreground", action="store_true", help="run to completion with --rm instead of detaching")
     p.add_argument("--timeout", type=float, default=900, help="seconds, foreground only")
     p.add_argument("--log", type=Path)
     p.add_argument("command", nargs=argparse.REMAINDER, help="-- command and args for the container")
     p.set_defaults(handler=_run)
 
-    p = ssub.add_parser("env", help="write RUN_DIR/.secrets.env with only the secrets recon says are needed")
+    p = ssub.add_parser("env", help="write the per-run env file with only the secrets recon says are needed (and the briefing approves, when it lists any)")
     p.add_argument("run_dir", type=Path)
     p.add_argument("--secrets", type=Path, default=None)
     p.set_defaults(handler=_env)
@@ -113,9 +113,9 @@ def _build(args: argparse.Namespace) -> int:
 def _run(args: argparse.Namespace) -> int:
     run_dir = args.run_dir.resolve()
     rid = _run_id(run_dir)
-    env_file = run_dir / ".secrets.env" if args.secrets else None
+    env_file = run_env_file(rid) if args.secrets else None
     if env_file and not env_file.exists():
-        raise ValueError("no .secrets.env yet; run `e2eat sandbox env <run-dir>` first")
+        raise ValueError("no per-run env file yet; run `e2eat sandbox env <run-dir>` first")
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     cmd = run_cmd(rid, run_dir, args.image, args.name, ports=args.port, env=args.env, env_file=env_file,
                   volumes=args.volume, command=command, detach=not args.foreground)
@@ -131,7 +131,11 @@ def _env(args: argparse.Namespace) -> int:
     recon = read_json(args.run_dir / "blackboard" / "facts" / "recon.json")
     path = args.secrets or secrets_file()
     secrets = parse_env_file(path) if path.exists() else {}
-    emit(write_run_env(args.run_dir, recon.get("secrets_needed", []), secrets))
+    needed = list(recon.get("secrets_needed", []))
+    approved = read_json_or(args.run_dir / "blackboard" / "facts" / "briefing.json", {}).get("approved_secrets")
+    withheld = [k for k in needed if isinstance(approved, list) and k not in approved]
+    needed = [k for k in needed if k not in withheld]
+    emit({**write_run_env(run_env_file(_run_id(args.run_dir)), needed, secrets), "withheld": withheld})
     return 0
 
 
