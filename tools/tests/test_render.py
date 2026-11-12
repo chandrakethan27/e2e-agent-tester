@@ -80,7 +80,7 @@ def test_render_with_missing_artifacts(run_dir):
 
 
 def test_banner_warns_when_project_was_never_run(run_dir):
-    write_json(run_dir / "blackboard/facts/runtime.json", {"status": "could-not-run", "strategy": "none"})
+    write_json(run_dir / "blackboard/facts/runtime.json", {"status": "failed", "strategy_used": "none"})
     html = Path(render_run(run_dir)["html"]).read_text()
     md = Path(run_dir / "report.md").read_text()
     assert "NOT RUN" in html and "static review only" in html
@@ -92,7 +92,7 @@ def test_banner_warns_when_runtime_facts_are_missing(run_dir):
 
 
 def test_banner_lists_failed_agents_when_run_was_partial(run_dir):
-    write_json(run_dir / "blackboard/facts/runtime.json", {"status": "running", "strategy": "repo-docker"})
+    write_json(run_dir / "blackboard/facts/runtime.json", {"status": "running", "strategy_used": "repo-docker"})
     set_agent(run_dir, "suite-runner", "failed", note="disk full")
     html = Path(render_run(run_dir)["html"]).read_text()
     assert "PARTIAL" in html and "suite-runner" in html and "disk full" in html
@@ -100,7 +100,7 @@ def test_banner_lists_failed_agents_when_run_was_partial(run_dir):
 
 
 def test_no_banner_for_a_complete_run(run_dir):
-    write_json(run_dir / "blackboard/facts/runtime.json", {"status": "running", "strategy": "repo-docker"})
+    write_json(run_dir / "blackboard/facts/runtime.json", {"status": "running", "strategy_used": "repo-docker"})
     set_agent(run_dir, "security-agent", "done")
     html = Path(render_run(run_dir)["html"]).read_text()
     assert "NOT RUN" not in html and "PARTIAL" not in html
