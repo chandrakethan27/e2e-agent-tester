@@ -11,7 +11,7 @@ def test_cli_init_phase_agent(tmp_path, sample_repo, capsys):
     run_dir = out["run_dir"]
     assert main(["phase", run_dir, "intake", "running"]) == 0
     assert json.loads(capsys.readouterr().out)["intake"] == "running"
-    assert main(["agent", run_dir, "recon-agent", "done", "--agent-id", "a1"]) == 0
+    assert main(["agent", run_dir, "recon-agent", "running", "--agent-id", "a1"]) == 0
     assert json.loads(capsys.readouterr().out)["agent_id"] == "a1"
 
 

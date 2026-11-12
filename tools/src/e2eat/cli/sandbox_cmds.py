@@ -16,6 +16,7 @@ from ..sandbox import (
     container_name,
     execute,
     image_tag,
+    labelled_run_ids,
     network_create_cmd,
     network_name,
     run_cmd,
@@ -64,12 +65,16 @@ def register(sub: argparse._SubParsersAction) -> None:
     p = ssub.add_parser("env", help="write the per-run env file with only the secrets recon says are needed (and the briefing approves, when it lists any)")
     p.add_argument("run_dir", type=Path)
     p.add_argument("--secrets", type=Path, default=None)
+    p.add_argument("--check", action="store_true", help="only report present/missing/withheld keys; write nothing")
     p.set_defaults(handler=_env)
 
     p = ssub.add_parser("teardown", help="remove every container, network, volume and image of the run")
     p.add_argument("run_dir", type=Path)
     p.add_argument("--keep-images", action="store_true")
     p.set_defaults(handler=_teardown)
+
+    p = ssub.add_parser("teardown-active", help="tear down every run that still owns labelled resources (SessionEnd hook; assumes one session)")
+    p.set_defaults(handler=_teardown_active)
 
     p = ssub.add_parser("stale", help="tear down leftovers from runs older than --max-age-hours")
     p.add_argument("--max-age-hours", type=float, default=6)
@@ -135,6 +140,10 @@ def _env(args: argparse.Namespace) -> int:
     approved = read_json_strict(args.run_dir / "blackboard" / "facts" / "briefing.json", {}, dict).get("approved_secrets")
     withheld = [k for k in needed if isinstance(approved, list) and k not in approved]
     needed = [k for k in needed if k not in withheld]
+    if args.check:
+        present = [k for k in needed if secrets.get(k) and "\n" not in secrets[k]]
+        emit({"env_file": None, "present": present, "missing": [k for k in needed if k not in present], "withheld": withheld})
+        return 0
     emit({**write_run_env(run_env_file(_run_id(args.run_dir)), needed, secrets), "withheld": withheld})
     return 0
 
@@ -143,6 +152,13 @@ def _teardown(args: argparse.Namespace) -> int:
     result = teardown(_run_id(args.run_dir), args.run_dir, args.keep_images)
     emit(result)
     return 1 if result.get("errors") else 0
+
+
+def _teardown_active(args: argparse.Namespace) -> int:
+    active = sorted(labelled_run_ids())
+    removed = {rid: teardown(rid) for rid in active}
+    emit({"active": active, "removed": removed})
+    return 1 if any(r.get("errors") for r in removed.values()) else 0
 
 
 def _stale(args: argparse.Namespace) -> int:

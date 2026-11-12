@@ -27,7 +27,7 @@ export default function () {
   }
 }
 ```
-3. Warm up once at 2 VUs for 5 s, then run with BUDGETS.load_concurrency VUs for BUDGETS.load_seconds:
+3. **Do not run the load test in wave 1** — the functional, security and suite agents are generating traffic and would contaminate the numbers. In wave 1 save `load.js`, check the targets answer, and list `{"check": "load", "targets": ["http://app:5000/products"]}` under `wave2`. When the orchestrator resumes you with "run wave 2" (you then have the app to yourself), warm up once at 2 VUs for 5 s, then run with BUDGETS.load_concurrency VUs for BUDGETS.load_seconds:
 `./bin/e2eat sandbox run $RUN_DIR --name k6 --image grafana/k6:0.54.0 --foreground --timeout <seconds> -v $RUN_DIR/blackboard/evidence/perf-agent:/work -e VUS=<n> -e DURATION=<s>s -e 'TARGETS=["http://app:5000/products"]' --log $RUN_DIR/blackboard/evidence/perf-agent/k6.log -- run --summary-export=/work/k6-summary.json /work/load.js`
 4. While it runs, sample `docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}'` for the app containers three times into `blackboard/evidence/perf-agent/stats.log`.
 
@@ -38,12 +38,13 @@ Time the documented main operation on a realistic sample inside the exec contain
 Use the ecosystem's standard benchmark from a container on the run network (`pgbench` for Postgres-compatible, `redis-benchmark` for Redis-compatible, the project's own bench tool if documented, else a small client script). Report ops/s and p99 at BUDGETS.load_concurrency and compare with any performance claim in recon.
 
 ## Wave 2 — browser timings (web-app only)
-Do NOT use the browser in wave 1. Put `{"check": "page-load", "urls": ["…"]}` under `wave2` in your facts. When the orchestrator resumes you with "run wave 2": `B=~/.claude/skills/gstack/browse/dist/browse`, then for each URL `$B goto <url>` and `$B perf` three times, keep the median, and fill `wave2_results`.
+Do NOT use the browser in wave 1. Put `{"check": "page-load", "urls": ["…"]}` under `wave2` in your facts. When the orchestrator resumes you with "run wave 2": `B=~/.claude/skills/gstack/browse/dist/browse` (if `test -x $B` fails, record the page-load check as `untested` — "browser tooling not installed"), then for each URL `$B goto <url>` and `$B perf` three times, keep the median, and fill `wave2_results`.
 
 ## Judging
 Dimension performance unless noted: p95 > 1000 ms on a simple read at modest load → medium (> 3000 ms → high); error rate > 1% under budget load → high (reliability); memory rising across samples → medium (reliability); a speed claim off by more than 2× → high (functional). Good numbers are facts, not findings.
 
 ## Facts `blackboard/facts/perf-agent.json`
-`{"tool": "k6", "vus": 10, "duration_s": 10, "endpoints": [{"url": "…", "p50_ms": 0, "p95_ms": 0, "p99_ms": 0, "rps": 0, "error_rate": 0}], "resources": {"peak_cpu_pct": 0, "peak_mem_mb": 0}, "wave2": [], "wave2_results": []}`
+`{"tool": "k6", "vus": null, "duration_s": null, "endpoints": [{"url": "…", "p50_ms": null, "p95_ms": null, "p99_ms": null, "rps": null, "error_rate": null}], "resources": {"peak_cpu_pct": null, "peak_mem_mb": null}, "wave2": [{"check": "load", "targets": ["…"]}], "wave2_results": [], "coverage": {"performance": {"planned": <load + latency checks>, "run": 0}, "reliability": {"planned": <error-rate and memory checks>, "run": 0}}, "untested": []}`
+Use `null` — never `0` — for numbers you did not measure, and raise `coverage.*.run` as the checks complete (the load test runs in wave 2).
 
 Reply ≤150 words.

@@ -12,7 +12,7 @@ The orchestrator gives you the challengeable finding ids (critical/high or confi
 - a runtime claim has no repro or transcript;
 - it is a likely false positive (test fixture, example value, unreachable code, dev-only dependency);
 - the severity is inflated against the severity guide in the agent contract;
-- it duplicates another finding's root cause (name the other id).
+- it duplicates another finding's root cause (name the other id). Read **all** findings (`./bin/e2eat findings $RUN_DIR`), not only the ones you were handed: a medium or low finding that duplicates a listed one may be challenged too (use its id in `challenges`) — otherwise the same problem is penalised twice.
 Write `blackboard/facts/skeptic-challenges.json`:
 `{"challenges": [{"finding_id": "F-security-002", "challenge": "A specific question the owner must answer with evidence."}]}`
 Findings you accept need no entry; write `{"challenges": []}` if everything holds up.

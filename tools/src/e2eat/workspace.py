@@ -151,3 +151,36 @@ def set_agent(run_dir: Path, agent: str, status: str, note: str | None = None, a
 
 def resume_phase(run: dict) -> str | None:
     return next((p for p in PHASES if run["phases"].get(p) not in ("done", "skipped")), None)
+
+
+STATIC_ONLY_RUNTIME = {
+    "status": "static-only", "strategy_used": "none", "base_urls": [], "internal_urls": [], "exec_container": None,
+    "containers": [], "network": None, "health": {"ok": False}, "logs": [], "coverage": {},
+}
+
+
+def reconfigure_run(run_dir: Path, profile: str | None = None, depth: str | None = None) -> dict:
+    """Change profile and/or depth of a run that has not started assessing, keeping its repo, id and recon."""
+    if profile:
+        _check(profile, PROFILES, "profile")
+    if depth:
+        _check(depth, DEPTHS, "depth")
+    with run_lock(run_dir):
+        run = load_run(run_dir)
+        started = [p for p in ("build", "assess", "crossexam", "synthesis", "finalize") if run["phases"].get(p) != "pending"]
+        if started:
+            raise ValueError(f"cannot reconfigure: phase(s) already started: {', '.join(started)}")
+        run["profile"] = profile or run["profile"]
+        run["depth"] = depth or run["depth"]
+        run["budgets"] = BUDGETS[run["depth"]]
+        save_run(run_dir, run)
+    return {"profile": run["profile"], "depth": run["depth"], "budgets": run["budgets"]}
+
+
+def mark_static_only(run_dir: Path) -> None:
+    """The user chose not to run the project: record that as the runtime outcome and skip the build phase."""
+    from .jsonio import write_json as _write
+
+    _write(Path(run_dir) / "blackboard" / "facts" / "runtime.json", STATIC_ONLY_RUNTIME)
+    set_phase(run_dir, "build", "skipped")
+    set_agent(run_dir, "runner-agent", "skipped", note="static review only (chosen by the user)")

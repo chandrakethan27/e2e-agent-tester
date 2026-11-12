@@ -82,6 +82,17 @@ def load_messages(run_dir: Path) -> list[dict]:
     return _load_dir(_board(run_dir) / "messages")
 
 
+def expire_open_messages(run_dir: Path) -> list[str]:
+    """Questions nobody answered by the end of assessment become coverage gaps: mark them expired."""
+    expired = []
+    for message in load_messages(run_dir):
+        if message.get("status") == "open":
+            path = _board(run_dir) / "messages" / f"{message['id']}.json"
+            write_json(path, message | {"status": "expired"})
+            expired.append(message["id"])
+    return expired
+
+
 def challengeable(findings: list[dict], limit: int) -> list[dict]:
     """Open findings that matter most or that the owner was unsure about, most severe first."""
     picked = [

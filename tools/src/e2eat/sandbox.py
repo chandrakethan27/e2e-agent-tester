@@ -238,14 +238,8 @@ def run_started_at(run_id: str) -> datetime | None:
         return None
 
 
-def stale_run_ids(
-    now: datetime | None = None,
-    max_age_hours: float = 6,
-    runner: Runner = default_runner,
-    exclude: Collection[str] = (),
-) -> list[str]:
-    """Run ids older than max_age_hours that still own containers, networks, volumes or images."""
-    now = now or datetime.now(timezone.utc)
+def labelled_run_ids(runner: Runner = default_runner) -> set[str]:
+    """Every run id that still owns a container, network, volume or image."""
     fmt = '{{.Label "' + LABEL + '"}}'
     seen: set[str] = set()
     for cmd in (["docker", "ps", "-a", "--filter", f"label={LABEL}", "--format", fmt],
@@ -257,6 +251,18 @@ def stale_run_ids(
     proc = runner(["docker", "image", "ls", "--filter", f"label={LABEL}", "--format", "{{.Repository}}"])
     if proc.returncode == 0:
         seen |= {line.strip().removeprefix("e2eat/") for line in proc.stdout.splitlines() if line.strip().startswith("e2eat/")}
+    return seen
+
+
+def stale_run_ids(
+    now: datetime | None = None,
+    max_age_hours: float = 6,
+    runner: Runner = default_runner,
+    exclude: Collection[str] = (),
+) -> list[str]:
+    """Run ids older than max_age_hours that still own containers, networks, volumes or images."""
+    now = now or datetime.now(timezone.utc)
+    seen = labelled_run_ids(runner)
     cutoff = timedelta(hours=max_age_hours)
     return sorted(rid for rid in seen if rid not in exclude and (started := run_started_at(rid)) and now - started > cutoff)
 

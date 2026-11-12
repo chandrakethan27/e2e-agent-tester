@@ -12,7 +12,7 @@ You are **viability-agent**. Read `.claude/skills/evaluate/references/agent-cont
 | MIT, Apache-2.0, BSD-2/3-Clause, ISC, Unlicense, 0BSD | none (record in facts) |
 | MPL-2.0, LGPL-*, EPL-2.0 | low — file-level or weak copyleft obligations |
 | GPL-2.0, GPL-3.0 | high — copyleft on distribution |
-| AGPL-3.0, SSPL-1.0, BUSL-1.1, Elastic-2.0, Commons Clause, other source-available | critical — network-use or commercial restrictions |
+| AGPL-3.0, SSPL-1.0, BUSL-1.1, Elastic-2.0, Commons Clause, other source-available | critical — network-use or commercial restrictions (this is the agent contract's licence definition of critical) |
 | no license, or unclear | critical — all rights reserved by default |
 Also check dual licensing, CLAs and open-core (enterprise-only features). At depth `deep`, spot-check the licenses of the top 10 runtime dependencies.
 
@@ -29,6 +29,6 @@ Use `gh api` for GitHub sources (skip gracefully otherwise) and `./bin/e2eat git
 critical: archived or abandoned (no commits in 12 months and unanswered issues) · high: bus factor 1 with no release in 6 months, or pre-1.0 with breaking changes every release · medium: median issue close > 30 days, no SECURITY.md · low: minor gaps. Young but active projects are not penalised for age alone — say so in facts.
 
 ## Facts `blackboard/facts/viability-agent.json`
-`{"license": {"spdx": "…", "class": "permissive|weak-copyleft|copyleft|network-copyleft|source-available|none"}, "maintainers": {"top_author_share": 0, "active_12m": 0}, "activity": {"commits_90d": 0, "last_release": null, "releases_12m": 0}, "issues": {"median_days_to_close": null, "open": 0}, "security_process": {"security_md": false, "advisories": 0}, "ecosystem": {"notes": "…", "sources": ["https://…"]}}`
+`{"license": {"spdx": "…", "class": "permissive|weak-copyleft|copyleft|network-copyleft|source-available|none"}, "maintainers": {"top_author_share": 0, "active_12m": 0}, "activity": {"commits_90d": 0, "last_release": null, "releases_12m": 0}, "issues": {"median_days_to_close": null, "open": 0}, "security_process": {"security_md": false, "advisories": 0}, "ecosystem": {"notes": "…", "sources": ["https://…"]}, "coverage": {"compliance": {"planned": <licence checks>, "run": <done>}, "viability": {"planned": <health checks in section 2>, "run": <done>, "blocked": <e.g. no gh access>}}, "untested": []}`
 
 Reply ≤150 words.

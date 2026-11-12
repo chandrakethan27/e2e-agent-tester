@@ -116,6 +116,30 @@ def validate_file(run_dir: Path, rel: Path, kind: str, check_evidence: bool = Fa
     return errors
 
 
+AGENT_OUTPUTS = {
+    "recon-agent": ("blackboard/facts/recon.json", "recon"),
+    "runner-agent": ("blackboard/facts/runtime.json", "runtime"),
+    "use-case-strategist": ("usecases.json", "usecases"),
+    "report-writer": ("report.json", "report"),
+} | {a: (f"blackboard/facts/{a}.json", "agentfacts") for a in AGENT_FACTS}
+
+
+def agent_output_problems(run_dir: Path, agent: str) -> list[str]:
+    """Why an agent may not be marked done yet: its required output file is missing or invalid."""
+    if agent not in AGENT_OUTPUTS:
+        return []
+    rel, kind = AGENT_OUTPUTS[agent]
+    path = Path(run_dir) / rel
+    if not path.exists():
+        return [f"{rel} is missing"]
+    problems = [f"{rel}: {e}" for e in validate_file(Path(run_dir), Path(rel), kind)]
+    if kind == "runtime" and not problems:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if "coverage" not in data:
+            problems.append(f"{rel}: coverage is missing (report operability checks planned/run)")
+    return problems
+
+
 def _documents(run_dir: Path) -> Iterator[tuple[Path, str]]:
     for name, kind in TOP_LEVEL.items():
         if (run_dir / name).exists():

@@ -38,14 +38,18 @@ def select_squad(project_type: str, runtime_status: str, depth: str) -> tuple[li
     return [agent for agent in RUNTIME_AGENTS if agent in wanted] + list(STATIC_AGENTS), skipped
 
 
-def plan_squad(run_dir: Path) -> dict:
+def plan_squad(run_dir: Path, preview: bool = False) -> dict:
+    """Pick the squad. With preview=True nothing is written and a missing runtime is assumed to come up `running`,
+    so the briefing can show the plan before anything is built without corrupting run.json."""
     facts = Path(run_dir) / "blackboard" / "facts"
     recon = read_json_strict(facts / "recon.json", expect=dict)  # no recon means nothing to plan: fail loudly
-    runtime = read_json_strict(facts / "runtime.json", {"status": "missing"}, dict)
+    runtime = read_json_strict(facts / "runtime.json", {"status": "running"} if preview else {"status": "missing"}, dict)
     if "project_type" not in recon:
         raise ValueError("recon.json has no project_type; rerun recon-agent")
     run = load_run(run_dir)
     squad, skipped = select_squad(recon["project_type"], runtime.get("status", "missing"), run["depth"])
+    if preview:
+        return {"squad": squad, "skipped": skipped, "preview": True}
     run["squad"], run["skipped"] = squad, skipped
     for agent, reason in skipped.items():
         run["agents"][agent] = {"status": "skipped", "note": reason}

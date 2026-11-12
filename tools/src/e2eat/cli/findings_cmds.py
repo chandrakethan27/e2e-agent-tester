@@ -10,6 +10,7 @@ from ..blackboard import (
     FINDING_STATUSES,
     apply_crossexam,
     challengeable,
+    expire_open_messages,
     finalize_findings,
     load_findings,
     load_messages,
@@ -40,6 +41,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("messages", help="list agent-to-agent questions")
     p.add_argument("run_dir", type=Path)
     p.add_argument("--status", choices=("open", "answered", "expired"))
+    p.add_argument("--expire", action="store_true", help="mark every still-open question expired (unanswered = coverage gap) and list them")
     p.set_defaults(handler=_messages)
 
     p = sub.add_parser("set-status", help="set a finding status (orchestrator only)")
@@ -83,6 +85,9 @@ def _findings(args: argparse.Namespace) -> int:
 
 
 def _messages(args: argparse.Namespace) -> int:
+    if args.expire:
+        emit({"expired": expire_open_messages(args.run_dir)})
+        return 0
     messages = load_messages(args.run_dir)
     emit([m for m in messages if not args.status or m.get("status") == args.status])
     return 0
