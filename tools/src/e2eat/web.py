@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Sequence
 
-from .sandbox import Runner, default_runner
+from .sandbox import Runner, runner_with_timeout
 
 IMAGE = "e2eat-web:latest"
 CONTAINER = "e2eat-web"
@@ -42,11 +42,11 @@ def open_url(port: int, run_id: str | None) -> str:
 def _run(cmd: Sequence[str], runner: Runner, what: str) -> str:
     proc = runner(cmd)
     if proc.returncode != 0:
-        raise ValueError(f"{what} failed: {(proc.stderr or proc.stdout).strip()[:300]}")
+        raise ValueError(f"{what} failed: {(proc.stderr or proc.stdout).strip()[-600:]}")
     return proc.stdout.strip()
 
 
-def start(runs_dir: Path, web_dir: Path, port: int, run_id: str | None, runner: Runner = default_runner) -> dict:
+def start(runs_dir: Path, web_dir: Path, port: int, run_id: str | None, runner: Runner = runner_with_timeout(900)) -> dict:
     _check(port, run_id)
     _run(build_cmd(web_dir), runner, "docker build of the web app")
     runner(["docker", "rm", "-f", CONTAINER])
@@ -54,5 +54,5 @@ def start(runs_dir: Path, web_dir: Path, port: int, run_id: str | None, runner: 
     return {"url": open_url(port, run_id), "container": CONTAINER}
 
 
-def stop(runner: Runner = default_runner) -> None:
+def stop(runner: Runner = runner_with_timeout(60)) -> None:
     runner(["docker", "rm", "-f", CONTAINER])

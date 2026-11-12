@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .jsonio import read_json, read_json_or, write_json
+from .jsonio import read_json, read_json_or, read_json_strict, run_lock, write_json
 from .validate import validate_document
 
 SEVERITIES = ("critical", "high", "medium", "low", "info")
@@ -31,15 +31,23 @@ def _board(run_dir: Path) -> Path:
     return Path(run_dir) / "blackboard"
 
 
+IDS_FILE = ".ids.json"
+
+
 def _next_number(run_dir: Path, prefix: str) -> int:
+    """Reserve the next number: two agents asking at once, or before writing their file, never get the same id."""
     pattern = re.compile(rf"^{re.escape(prefix)}(\d{{3}})\.json$")
-    numbers = [
-        int(m[1])
-        for sub in ("findings", "messages", "invalid")
-        for path in (_board(run_dir) / sub).glob(f"{prefix}*.json")
-        if (m := pattern.match(path.name))
-    ]
-    return max(numbers, default=0) + 1
+    with run_lock(run_dir):
+        issued = read_json_strict(Path(run_dir) / IDS_FILE, {}, dict)
+        numbers = [
+            int(m[1])
+            for sub in ("findings", "messages", "invalid")
+            for path in (_board(run_dir) / sub).glob(f"{prefix}*.json")
+            if (m := pattern.match(path.name))
+        ]
+        number = max([*numbers, issued.get(prefix, 0)]) + 1
+        write_json(Path(run_dir) / IDS_FILE, issued | {prefix: number})
+    return number
 
 
 def next_finding_id(run_dir: Path, agent: str) -> str:
@@ -58,8 +66,7 @@ def _load_dir(directory: Path) -> list[dict]:
 
 
 def _status_ledger(run_dir: Path) -> dict:
-    ledger = read_json_or(Path(run_dir) / STATUS_FILE, {})
-    return ledger if isinstance(ledger, dict) else {}
+    return read_json_strict(Path(run_dir) / STATUS_FILE, {}, dict)  # a corrupt ledger must stop scoring, not reset every finding to open
 
 
 def load_findings(run_dir: Path) -> list[dict]:
@@ -99,13 +106,14 @@ def update_finding(run_dir: Path, finding_id: str, **fields) -> dict:
     path = _finding_path(run_dir, finding_id)
     changes = {key: value for key, value in fields.items() if value is not None}
     owned = {key: value for key, value in changes.items() if key in ORCHESTRATOR_FIELDS}
-    if owned:
-        ledger = _status_ledger(run_dir)
-        ledger[finding_id] = ledger.get(finding_id, {}) | owned
-        write_json(Path(run_dir) / STATUS_FILE, ledger)
-    data = read_json(path)
-    data.update(changes)  # mirror orchestrator fields so agents reading the file see the challenge
-    write_json(path, data)
+    with run_lock(run_dir):
+        if owned:
+            ledger = _status_ledger(run_dir)
+            ledger[finding_id] = ledger.get(finding_id, {}) | owned
+            write_json(Path(run_dir) / STATUS_FILE, ledger)
+        data = read_json(path)
+        data.update(changes)  # mirror orchestrator fields so agents reading the file see the challenge
+        write_json(path, data)
     return next((f for f in load_findings(run_dir) if f["id"] == finding_id), data)
 
 

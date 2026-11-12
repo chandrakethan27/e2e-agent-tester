@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "briefing",
+  "type": "object",
+  "required": ["summary", "plan", "cannot_test"],
+  "properties": {
+    "summary": {"type": "string", "minLength": 1},
+    "plan": {"type": "array", "items": {"type": "string"}},
+    "cannot_test": {"type": "array", "items": {"type": "string"}},
+    "approved_secrets": {"type": "array", "items": {"type": "string"}}
+  }
+}

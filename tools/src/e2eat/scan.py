@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .jsonio import read_json, write_json
-from .sandbox import LABEL, LIMITS, Runner, default_runner
+from .sandbox import LABEL, LIMITS, Runner, runner_with_timeout
 
 SCANNER_IMAGES = {
     "gitleaks": "zricethezav/gitleaks:v8.21.2",
@@ -58,7 +58,7 @@ def summarize(tool: str, data: object) -> int:
     raise ValueError(f"unknown scanner {tool!r}")
 
 
-def run_scans(run_dir: Path, tools: Sequence[str], runner: Runner = default_runner) -> dict:
+def run_scans(run_dir: Path, tools: Sequence[str], runner: Runner = runner_with_timeout(1500)) -> dict:
     unknown = [tool for tool in tools if tool not in SCANNER_IMAGES]
     if unknown:
         raise ValueError(f"unknown scanner(s) {', '.join(unknown)}; choose from {', '.join(SCANNER_IMAGES)}")

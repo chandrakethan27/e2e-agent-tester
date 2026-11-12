@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ..jsonio import read_json, read_json_or
+from ..jsonio import read_json, read_json_strict
 from ..paths import run_env_file, secrets_file
 from ..redact import parse_env_file
 from ..sandbox import (
@@ -48,7 +48,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--timeout", type=float, default=1800)
     p.set_defaults(handler=_build)
 
-    p = ssub.add_parser("run", help="docker run with limits, labels, run network, localhost-only ports")
+    p = ssub.add_parser("run", help="docker run with limits, labels, run network, localhost-only ports; put the container command after `--`")
     p.add_argument("run_dir", type=Path)
     p.add_argument("--name", required=True)
     p.add_argument("--image", required=True)
@@ -59,7 +59,6 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--foreground", action="store_true", help="run to completion with --rm instead of detaching")
     p.add_argument("--timeout", type=float, default=900, help="seconds, foreground only")
     p.add_argument("--log", type=Path)
-    p.add_argument("command", nargs=argparse.REMAINDER, help="-- command and args for the container")
     p.set_defaults(handler=_run)
 
     p = ssub.add_parser("env", help="write the per-run env file with only the secrets recon says are needed (and the briefing approves, when it lists any)")
@@ -74,6 +73,7 @@ def register(sub: argparse._SubParsersAction) -> None:
 
     p = ssub.add_parser("stale", help="tear down leftovers from runs older than --max-age-hours")
     p.add_argument("--max-age-hours", type=float, default=6)
+    p.add_argument("--except", dest="exclude", action="append", default=[], metavar="RUN_ID", help="never touch this run (repeatable)")
     p.set_defaults(handler=_stale)
 
 
@@ -116,7 +116,7 @@ def _run(args: argparse.Namespace) -> int:
     env_file = run_env_file(rid) if args.secrets else None
     if env_file and not env_file.exists():
         raise ValueError("no per-run env file yet; run `e2eat sandbox env <run-dir>` first")
-    command = args.command[1:] if args.command[:1] == ["--"] else args.command
+    command = args.passthrough
     cmd = run_cmd(rid, run_dir, args.image, args.name, ports=args.port, env=args.env, env_file=env_file,
                   volumes=args.volume, command=command, detach=not args.foreground)
     log = args.log or _default_log(run_dir, f"run-{args.name}.log")
@@ -132,7 +132,7 @@ def _env(args: argparse.Namespace) -> int:
     path = args.secrets or secrets_file()
     secrets = parse_env_file(path) if path.exists() else {}
     needed = list(recon.get("secrets_needed", []))
-    approved = read_json_or(args.run_dir / "blackboard" / "facts" / "briefing.json", {}).get("approved_secrets")
+    approved = read_json_strict(args.run_dir / "blackboard" / "facts" / "briefing.json", {}, dict).get("approved_secrets")
     withheld = [k for k in needed if isinstance(approved, list) and k not in approved]
     needed = [k for k in needed if k not in withheld]
     emit({**write_run_env(run_env_file(_run_id(args.run_dir)), needed, secrets), "withheld": withheld})
@@ -140,11 +140,13 @@ def _env(args: argparse.Namespace) -> int:
 
 
 def _teardown(args: argparse.Namespace) -> int:
-    emit(teardown(_run_id(args.run_dir), args.run_dir, args.keep_images))
-    return 0
+    result = teardown(_run_id(args.run_dir), args.run_dir, args.keep_images)
+    emit(result)
+    return 1 if result.get("errors") else 0
 
 
 def _stale(args: argparse.Namespace) -> int:
-    stale = stale_run_ids(max_age_hours=args.max_age_hours)
-    emit({"stale": stale, "removed": {rid: teardown(rid) for rid in stale}})
-    return 0
+    stale = stale_run_ids(max_age_hours=args.max_age_hours, exclude=set(args.exclude))
+    removed = {rid: teardown(rid) for rid in stale}
+    emit({"stale": stale, "removed": removed})
+    return 1 if any(r.get("errors") for r in removed.values()) else 0

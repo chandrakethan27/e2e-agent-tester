@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from ..paths import runs_root
-from ..workspace import AGENT_STATUSES, DEPTHS, PHASE_STATUSES, PHASES, PROFILES, init_run, load_run, set_agent, set_phase
+from ..workspace import AGENT_NAMES, AGENT_STATUSES, DEPTHS, PHASE_STATUSES, PHASES, PROFILES, init_run, load_run, set_agent, set_phase
 from .output import emit
 
 
@@ -26,7 +26,7 @@ def register(sub: argparse._SubParsersAction) -> None:
 
     p = sub.add_parser("agent", help="set an agent status (orchestrator only)")
     p.add_argument("run_dir", type=Path)
-    p.add_argument("agent")
+    p.add_argument("agent", choices=AGENT_NAMES)
     p.add_argument("status", choices=AGENT_STATUSES)
     p.add_argument("--note")
     p.add_argument("--agent-id", help="Agent tool id, kept so the agent can be resumed with SendMessage")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import time
 from dataclasses import dataclass
 from functools import cache
 from importlib import resources
@@ -13,9 +14,9 @@ from typing import Iterator
 
 from jsonschema import Draft202012Validator
 
-SCHEMA_NAMES = ("run", "recon", "runtime", "finding", "message", "scores", "usecases", "report", "challenges", "rulings")
-TOP_LEVEL = {"run.json": "run", "scores.json": "scores", "usecases.json": "usecases", "report.json": "report"}
-FACTS = {"recon.json": "recon", "runtime.json": "runtime",
+SCHEMA_NAMES = ("run", "recon", "runtime", "finding", "message", "scores", "usecases", "report", "challenges", "rulings", "briefing", "ledger")
+TOP_LEVEL = {"run.json": "run", "scores.json": "scores", "usecases.json": "usecases", "report.json": "report", "finding-status.json": "ledger"}
+FACTS = {"recon.json": "recon", "runtime.json": "runtime", "briefing.json": "briefing",
          "skeptic-challenges.json": "challenges", "skeptic-rulings.json": "rulings"}
 QUARANTINABLE = ("finding", "message")
 LINE_SUFFIX = re.compile(r"(#L?\d+(-L?\d+)?|:\d+(-\d+)?)$")
@@ -52,7 +53,7 @@ def evidence_problem(run_dir: Path, ref: str) -> str | None:
             return f"evidence escapes the run dir: {ref}"
         if not path.exists():
             return f"evidence not found: {ref}"
-    except (ValueError, OSError):
+    except (ValueError, OSError, RuntimeError):  # RuntimeError: symlink loop
         return f"evidence path is invalid: {ref!r}"
     return None
 
@@ -95,12 +96,28 @@ def _documents(run_dir: Path) -> Iterator[tuple[Path, str]]:
             yield path.relative_to(run_dir), kind
 
 
-def validate_run(run_dir: Path, check_evidence: bool = False, quarantine: bool = False) -> list[Issue]:
+def _free_name(target: Path) -> Path:
+    candidate, n = target, 0
+    while candidate.exists():
+        n += 1
+        candidate = target.with_name(f"{target.stem}.{n}{target.suffix}")
+    return candidate
+
+
+def validate_run(
+    run_dir: Path, check_evidence: bool = False, quarantine: bool = False, grace_secs: float = 0
+) -> list[Issue]:
+    """Validate run artifacts. With quarantine, invalid findings/messages move to blackboard/invalid/, except files
+    modified within grace_secs (an agent may still be writing them) and never over an earlier quarantined file."""
     run_dir = Path(run_dir)
     issues: list[Issue] = []
     for rel, kind in list(_documents(run_dir)):
         errors = validate_file(run_dir, rel, kind, check_evidence)
         issues += [Issue(rel.as_posix(), error) for error in errors]
         if errors and quarantine and kind in QUARANTINABLE:
-            shutil.move(run_dir / rel, run_dir / "blackboard" / "invalid" / rel.name)
+            source = run_dir / rel
+            if grace_secs and time.time() - source.stat().st_mtime < grace_secs:
+                issues.append(Issue(rel.as_posix(), "modified moments ago; not quarantined yet (still being written?)"))
+                continue
+            shutil.move(source, _free_name(run_dir / "blackboard" / "invalid" / rel.name))
     return issues

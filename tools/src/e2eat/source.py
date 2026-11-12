@@ -72,7 +72,17 @@ def parse_source(raw: str) -> Source:
     raise ValueError(f"not a GitHub/git URL, directory, or .zip/.tar.gz/.tgz/.tar archive: {raw}")
 
 
-def fetch_source(source: Source, dest: Path, runner: Callable[..., object] = subprocess.run) -> None:
+CLONE_TIMEOUT = 600
+
+
+def _timed_run(cmd, check: bool = True):
+    try:
+        return subprocess.run(cmd, check=check, timeout=CLONE_TIMEOUT)
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError(f"{' '.join(map(str, cmd[:3]))} timed out after {CLONE_TIMEOUT}s") from exc
+
+
+def fetch_source(source: Source, dest: Path, runner: Callable[..., object] = _timed_run) -> None:
     if source.kind == "git":
         cmd = ["git", "clone", "--no-tags"]  # full history: secret scanners need old blobs offline
         if source.ref:
@@ -118,6 +128,13 @@ def _unwrap_single_dir(dest: Path) -> None:
     inner.rmdir()
 
 
+def _escapes(path: Path, root: Path) -> bool:
+    try:
+        return not path.resolve().is_relative_to(root)
+    except (RuntimeError, OSError):  # symlink loop or unreadable target: never trust it
+        return True
+
+
 def drop_escaping_symlinks(root: Path) -> list[str]:
     """Delete symlinks that point outside root so no agent or build can read host files through them."""
     root = Path(root).resolve()
@@ -125,7 +142,7 @@ def drop_escaping_symlinks(root: Path) -> list[str]:
     for dirpath, dirnames, filenames in os.walk(root):
         for name in [*dirnames, *filenames]:
             path = Path(dirpath) / name
-            if path.is_symlink() and not path.resolve().is_relative_to(root):
+            if path.is_symlink() and _escapes(path, root):
                 dropped.append(path.relative_to(root).as_posix())
                 path.unlink()
                 if name in dirnames:

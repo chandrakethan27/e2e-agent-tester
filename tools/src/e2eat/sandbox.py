@@ -7,7 +7,7 @@ import re
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Callable, Collection, Sequence
 
 from .paths import run_env_file
 
@@ -37,10 +37,24 @@ _PORT = re.compile(r"^(\d{1,5})(?::(\d{1,5}))?$")
 _RUN_STAMP = re.compile(r"-(\d{8}-\d{6})$")
 
 Runner = Callable[[Sequence[str]], subprocess.CompletedProcess]
+DEFAULT_TIMEOUT = 120
 
 
-def default_runner(cmd: Sequence[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(list(cmd), capture_output=True, text=True)
+def runner_with_timeout(seconds: float) -> Runner:
+    """A subprocess runner that never hangs: a timeout becomes exit code 124, a missing binary exit code 127."""
+
+    def run(cmd: Sequence[str]) -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run(list(cmd), capture_output=True, text=True, timeout=seconds)
+        except subprocess.TimeoutExpired as exc:
+            return subprocess.CompletedProcess(list(cmd), 124, _text(exc.stdout), f"{_text(exc.stderr)}[e2eat] timed out after {seconds}s")
+        except FileNotFoundError as exc:
+            return subprocess.CompletedProcess(list(cmd), 127, "", str(exc))
+
+    return run
+
+
+default_runner = runner_with_timeout(DEFAULT_TIMEOUT)
 
 
 def network_name(run_id: str) -> str:
@@ -175,8 +189,10 @@ def execute(cmd: Sequence[str], log_path: Path | None = None, timeout: float | N
     return {"exit_code": code, "tail": output[-4000:], "log": str(log_path) if log_path else None}
 
 
-def teardown(run_id: str, run_dir: Path | None = None, keep_images: bool = False, runner: Runner = default_runner) -> dict[str, int]:
+def teardown(run_id: str, run_dir: Path | None = None, keep_images: bool = False, runner: Runner = default_runner) -> dict:
+    """Remove every labelled resource of the run. Failures are reported under "errors" instead of being counted as removed."""
     filters = [f"label={LABEL}={run_id}", f"label=com.docker.compose.project={compose_project(run_id)}"]
+    errors: list[str] = []
 
     def ids(*base: str) -> list[str]:
         found: set[str] = set()
@@ -184,9 +200,11 @@ def teardown(run_id: str, run_dir: Path | None = None, keep_images: bool = False
             proc = runner([*base, "--filter", flt])
             if proc.returncode == 0:
                 found |= set(proc.stdout.split())
+            else:
+                errors.append(f"{' '.join(base[:3])} failed: {(proc.stderr or proc.stdout).strip()[:200]}")
         return sorted(found)
 
-    removed = {"containers": 0, "networks": 0, "volumes": 0, "images": 0}
+    removed: dict = {"containers": 0, "networks": 0, "volumes": 0, "images": 0}
     steps = [
         ("containers", ("docker", "ps", "-aq"), ("docker", "rm", "-f", "-v")),
         ("networks", ("docker", "network", "ls", "-q"), ("docker", "network", "rm")),
@@ -197,30 +215,50 @@ def teardown(run_id: str, run_dir: Path | None = None, keep_images: bool = False
     for kind, list_cmd, remove_cmd in steps:
         found = ids(*list_cmd)
         if found:
-            runner([*remove_cmd, *found])
-            removed[kind] = len(found)
+            proc = runner([*remove_cmd, *found])
+            if proc.returncode == 0:
+                removed[kind] = len(found)
+            else:
+                errors.append(f"removing {kind} failed: {(proc.stderr or proc.stdout).strip()[:200]}")
     run_env_file(run_id).unlink(missing_ok=True)
     if run_dir is not None:
         (Path(run_dir) / ".secrets.env").unlink(missing_ok=True)  # written there by older versions
+    if errors:
+        removed["errors"] = errors
     return removed
 
 
 def run_started_at(run_id: str) -> datetime | None:
     m = _RUN_STAMP.search(run_id)
-    return datetime.strptime(m[1], "%Y%m%d-%H%M%S").replace(tzinfo=timezone.utc) if m else None
+    if not m:
+        return None
+    try:
+        return datetime.strptime(m[1], "%Y%m%d-%H%M%S").replace(tzinfo=timezone.utc)
+    except ValueError:  # e.g. a label like x-20261399-000000
+        return None
 
 
-def stale_run_ids(now: datetime | None = None, max_age_hours: float = 6, runner: Runner = default_runner) -> list[str]:
+def stale_run_ids(
+    now: datetime | None = None,
+    max_age_hours: float = 6,
+    runner: Runner = default_runner,
+    exclude: Collection[str] = (),
+) -> list[str]:
+    """Run ids older than max_age_hours that still own containers, networks, volumes or images."""
     now = now or datetime.now(timezone.utc)
     fmt = '{{.Label "' + LABEL + '"}}'
     seen: set[str] = set()
     for cmd in (["docker", "ps", "-a", "--filter", f"label={LABEL}", "--format", fmt],
-                ["docker", "network", "ls", "--filter", f"label={LABEL}", "--format", fmt]):
+                ["docker", "network", "ls", "--filter", f"label={LABEL}", "--format", fmt],
+                ["docker", "volume", "ls", "--filter", f"label={LABEL}", "--format", fmt]):
         proc = runner(cmd)
         if proc.returncode == 0:
             seen |= {line.strip() for line in proc.stdout.splitlines() if line.strip()}
+    proc = runner(["docker", "image", "ls", "--filter", f"label={LABEL}", "--format", "{{.Repository}}"])
+    if proc.returncode == 0:
+        seen |= {line.strip().removeprefix("e2eat/") for line in proc.stdout.splitlines() if line.strip().startswith("e2eat/")}
     cutoff = timedelta(hours=max_age_hours)
-    return sorted(rid for rid in seen if (started := run_started_at(rid)) and now - started > cutoff)
+    return sorted(rid for rid in seen if rid not in exclude and (started := run_started_at(rid)) and now - started > cutoff)
 
 
 def write_run_env(dest: Path, needed: Sequence[str], secrets: dict[str, str]) -> dict:

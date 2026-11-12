@@ -23,7 +23,7 @@ def register(sub: argparse._SubParsersAction) -> None:
 
 
 def _validate(args: argparse.Namespace) -> int:
-    issues = validate_run(args.run_dir, args.check_evidence, args.quarantine)
+    issues = validate_run(args.run_dir, args.check_evidence, args.quarantine, grace_secs=3)
     emit({"ok": not issues, "issues": [asdict(issue) for issue in issues]})
     return 1 if issues else 0
 

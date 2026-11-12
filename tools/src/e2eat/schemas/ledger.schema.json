@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ledger",
+  "type": "object",
+  "propertyNames": {"pattern": "^F-[a-z0-9-]+-[0-9]{3}$"},
+  "additionalProperties": {
+    "type": "object",
+    "required": ["status"],
+    "properties": {
+      "status": {"enum": ["open", "confirmed", "disputed", "dropped"]},
+      "challenge": {"type": "string"},
+      "ruling_reason": {"type": "string"}
+    }
+  }
+}

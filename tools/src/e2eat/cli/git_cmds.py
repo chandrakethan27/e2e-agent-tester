@@ -17,7 +17,8 @@ def register(sub: argparse._SubParsersAction) -> None:
 
 
 def _git(args: argparse.Namespace) -> int:
-    git_args = args.args[1:] if args.args[:1] == ["--"] else args.args
+    git_args = [*args.args, *(["--", *args.passthrough] if args.passthrough else [])]
+    git_args = git_args[1:] if git_args[:1] == ["--"] else git_args
     result = run_git(args.run_dir, git_args)
     sys.stdout.write(result["stdout"])
     sys.stderr.write(result["stderr"])

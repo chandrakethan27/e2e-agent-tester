@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from .jsonio import read_json, write_json
+from .jsonio import read_json, run_lock, write_json
 from .source import Source, drop_escaping_symlinks, fetch_source, neutralize_git_dir, parse_source, strip_userinfo
 
 PROFILES = ("adopt", "radar", "audit")
@@ -15,6 +16,11 @@ DEPTHS = ("quick", "standard", "deep")
 PHASES = ("intake", "build", "assess", "crossexam", "synthesis", "finalize")
 PHASE_STATUSES = ("pending", "running", "done", "failed", "skipped")
 AGENT_STATUSES = PHASE_STATUSES
+AGENT_NAMES = (
+    "recon-agent", "runner-agent", "functional-tester", "suite-runner", "security-agent", "perf-agent", "architecture-agent",
+    "viability-agent", "skeptic-agent", "use-case-strategist", "report-writer",
+)
+EVENTS_FILE = "events.jsonl"
 BLACKBOARD_DIRS = ("facts", "findings", "messages", "evidence", "invalid")
 BUDGETS = {
     "quick": {"minutes": 15, "max_journeys": 5, "load_seconds": 10, "load_concurrency": 10,
@@ -92,26 +98,55 @@ def init_run(
     return run_dir
 
 
+def _stamp() -> str:
+    return _now().isoformat(timespec="seconds")
+
+
+def _record_event(run_dir: Path, kind: str, name: str, status: str, note: str | None) -> None:
+    event = {"ts": _stamp(), "kind": kind, "name": name, "status": status} | ({"note": note} if note else {})
+    with open(Path(run_dir) / EVENTS_FILE, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
+def _mark_times(entry: dict, status: str, now: str) -> None:
+    if status == "running":
+        entry.setdefault("started_at", now)
+        entry.pop("finished_at", None)
+    elif status in ("done", "failed", "skipped"):
+        entry["finished_at"] = now
+
+
 def set_phase(run_dir: Path, phase: str, status: str) -> None:
     _check(phase, PHASES, "phase")
     _check(status, PHASE_STATUSES, "phase status")
-    run = load_run(run_dir)
-    run["phases"][phase] = status
-    save_run(run_dir, run)
+    with run_lock(run_dir):
+        run = load_run(run_dir)
+        now = _stamp()
+        run["phases"][phase] = status
+        _mark_times(run.setdefault("timings", {}).setdefault(phase, {}), status, now)
+        if phase == "finalize" and status in ("done", "failed"):
+            run["finished_at"] = now
+        save_run(run_dir, run)
+        _record_event(run_dir, "phase", phase, status, None)
 
 
 def set_agent(run_dir: Path, agent: str, status: str, note: str | None = None, agent_id: str | None = None) -> None:
+    _check(agent, AGENT_NAMES, "agent")
     _check(status, AGENT_STATUSES, "agent status")
-    run = load_run(run_dir)
-    entry = run["agents"].get(agent, {})
-    entry["status"] = status
-    if note is not None:
-        entry["note"] = note
-    if agent_id is not None:
-        entry["agent_id"] = agent_id
-    entry["updated_at"] = _now().isoformat(timespec="seconds")
-    run["agents"][agent] = entry
-    save_run(run_dir, run)
+    with run_lock(run_dir):
+        run = load_run(run_dir)
+        entry = run["agents"].get(agent, {})
+        entry["status"] = status
+        if note is not None:
+            entry["note"] = note
+        if agent_id is not None:
+            entry["agent_id"] = agent_id
+        now = _stamp()
+        entry["updated_at"] = now
+        _mark_times(entry, status, now)
+        run["agents"][agent] = entry
+        save_run(run_dir, run)
+        _record_event(run_dir, "agent", agent, status, note)
 
 
 def resume_phase(run: dict) -> str | None:

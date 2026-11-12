@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .jsonio import read_json, read_json_or
+from .jsonio import read_json_strict
 from .workspace import load_run, save_run
 
 PROJECT_TYPES = ("web-app", "api-service", "cli", "library", "database", "ai-app", "data-pipeline", "infra-tool", "mobile", "unknown")
@@ -40,8 +40,10 @@ def select_squad(project_type: str, runtime_status: str, depth: str) -> tuple[li
 
 def plan_squad(run_dir: Path) -> dict:
     facts = Path(run_dir) / "blackboard" / "facts"
-    recon = read_json(facts / "recon.json")
-    runtime = read_json_or(facts / "runtime.json", {"status": "missing"})
+    recon = read_json_strict(facts / "recon.json", expect=dict)  # no recon means nothing to plan: fail loudly
+    runtime = read_json_strict(facts / "runtime.json", {"status": "missing"}, dict)
+    if "project_type" not in recon:
+        raise ValueError("recon.json has no project_type; rerun recon-agent")
     run = load_run(run_dir)
     squad, skipped = select_squad(recon["project_type"], runtime.get("status", "missing"), run["depth"])
     run["squad"], run["skipped"] = squad, skipped

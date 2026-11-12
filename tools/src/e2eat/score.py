@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .blackboard import SEVERITIES, load_findings
-from .jsonio import read_json_or, write_json
+from .jsonio import read_json_strict, write_json
 from .workspace import load_run
 
 DIMENSIONS = ("functional", "security", "performance", "reliability", "maintainability", "operability", "compliance", "viability")
@@ -93,7 +93,7 @@ def compute_scores(run: dict, findings: list[dict], runtime: dict) -> dict:
 
 def score_run(run_dir: Path) -> dict:
     run_dir = Path(run_dir)
-    runtime = read_json_or(run_dir / "blackboard" / "facts" / "runtime.json", {})
+    runtime = read_json_strict(run_dir / "blackboard" / "facts" / "runtime.json", {}, dict)
     scores = compute_scores(load_run(run_dir), load_findings(run_dir), runtime)
     write_json(run_dir / "scores.json", scores)
     return scores

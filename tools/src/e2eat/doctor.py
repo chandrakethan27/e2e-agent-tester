@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from .paths import secrets_file
-from .sandbox import Runner, default_runner
+from .sandbox import Runner, runner_with_timeout
 
 MIN_FREE_BYTES = 5 * 1024**3
 BROWSE_BIN = Path.home() / ".claude" / "skills" / "gstack" / "browse" / "dist" / "browse"
@@ -23,7 +23,7 @@ class Check:
 
 
 def run_checks(
-    runner: Runner = default_runner,
+    runner: Runner = runner_with_timeout(30),
     which: Callable[[str], str | None] = shutil.which,
     browse_bin: Path = BROWSE_BIN,
     secrets: Path | None = None,
