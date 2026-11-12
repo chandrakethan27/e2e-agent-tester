@@ -291,7 +291,7 @@ def test_stale_covers_volumes_images_exclusions_and_bad_stamps():
     outputs = {
         "docker ps -a": "old-20261015-010000\n",
         "docker volume ls": "vol-20261015-020000\nx-20261399-000000\n",
-        "docker image ls": f"e2eat/img-20261015-030000\nother/thing\n",
+        "docker image ls": "e2eat/img-20261015-030000\nother/thing\n",
         "docker network ls": "keep-20261015-010000\n",
     }
     runner, _ = _runner(outputs)

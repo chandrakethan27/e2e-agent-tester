@@ -170,7 +170,11 @@ def _split(script: str, depth: int = 0) -> list[_Cmd]:
             cmds.append(cmd)
         return cmd
 
-    def add_sub(inner: str, lead: str, end: int) -> None:
+    def put(chunk: str) -> None:
+        raw.append(chunk)
+        text.append(chunk)
+
+    def add_sub(inner: str, lead: int, end: int) -> None:
         subs.append(inner)
         cmds.extend(_split(inner, depth + 1))
         raw.append(script[lead:end])
@@ -180,13 +184,13 @@ def _split(script: str, depth: int = 0) -> list[_Cmd]:
         c = script[i]
         nxt = script[i + 1] if i + 1 < n else ""
         if quote == "'":
-            raw.append(c), text.append(c)
+            put(c)
             if c == "'":
                 quote = None
             i += 1
             continue
         if c == "\\" and i + 1 < n:
-            raw.append(script[i:i + 2]), text.append(script[i:i + 2])
+            put(script[i:i + 2])
             i += 2
             continue
         if c == "$" and nxt == "(":
@@ -204,14 +208,14 @@ def _split(script: str, depth: int = 0) -> list[_Cmd]:
             i = end + 1
             continue
         if quote == '"':
-            raw.append(c), text.append(c)
+            put(c)
             if c == '"':
                 quote = None
             i += 1
             continue
         if c in "'\"":
             quote = c
-            raw.append(c), text.append(c)
+            put(c)
             i += 1
             continue
         if c in "<>" and nxt == "(":
@@ -229,7 +233,7 @@ def _split(script: str, depth: int = 0) -> list[_Cmd]:
             m = _HEREDOC.match(script, i)
             if m:
                 pending.append((m.group(3), m.group(1) == "-"))
-                raw.append(m.group(0)), text.append(m.group(0))
+                put(m.group(0))
                 i = m.end()
                 continue
         if c == "\n":
@@ -255,13 +259,13 @@ def _split(script: str, depth: int = 0) -> list[_Cmd]:
             if c in "{}":  # only a grouping brace when standing alone as a word; otherwise literal text
                 prev = script[i - 1] if i else " "
                 if not (prev in " \t\n;(" and nxt in " \t\n"):
-                    raw.append(c), text.append(c)
+                    put(c)
                     i += 1
                     continue
             flush()
             i += 2 if script[i:i + 2] in ("&&", "||", "|&") else 1
             continue
-        raw.append(c), text.append(c)
+        put(c)
         i += 1
     flush()
     return cmds
@@ -545,7 +549,7 @@ FILE_TOOLS = _WRITE_TOOLS | {"Read", "Grep", "Glob"}
 def check_file_access(tool: str, tool_input: dict, project_root: Path, *, subagent: bool = False) -> str | None:
     """Block secret reads, writes to the integrity files e2eat owns, edits of the evaluated repo, and risky home paths."""
     root = os.path.realpath(project_root)
-    candidates = [tool_input.get(k) for k in ("file_path", "notebook_path", "path", "glob") if isinstance(tool_input.get(k), str)]
+    candidates: list[str] = [v for k in ("file_path", "notebook_path", "path", "glob") if isinstance(v := tool_input.get(k), str)]
     home = os.path.realpath(os.path.expanduser("~"))
     for raw in candidates:
         expanded = os.path.expanduser(raw)

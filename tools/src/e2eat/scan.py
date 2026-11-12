@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 from .jsonio import read_json, write_json
 from .sandbox import LABEL, LIMITS, Runner, runner_with_timeout
@@ -43,7 +43,7 @@ def scan_cmd(run_id: str, tool: str, repo: Path, out_dir: Path, has_git: bool) -
     return [*cmd, SCANNER_IMAGES[tool], *args]
 
 
-def summarize(tool: str, data: object) -> int:
+def summarize(tool: str, data: Any) -> int:
     """Number of raw results a scanner reported (before the security agent triages them)."""
     if not data:
         return 0

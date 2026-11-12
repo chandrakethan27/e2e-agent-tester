@@ -6,7 +6,7 @@ import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from .jsonio import read_json, run_lock, write_json
 from .source import Source, drop_escaping_symlinks, fetch_source, neutralize_git_dir, parse_source, strip_userinfo
@@ -153,7 +153,7 @@ def resume_phase(run: dict) -> str | None:
     return next((p for p in PHASES if run["phases"].get(p) not in ("done", "skipped")), None)
 
 
-STATIC_ONLY_RUNTIME = {
+STATIC_ONLY_RUNTIME: dict[str, Any] = {
     "status": "static-only", "strategy_used": "none", "base_urls": [], "internal_urls": [], "exec_container": None,
     "containers": [], "network": None, "health": {"ok": False}, "logs": [], "coverage": {},
 }

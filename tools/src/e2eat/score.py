@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from collections import Counter
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 from .blackboard import SEVERITIES, load_findings
 from .jsonio import read_json_or, read_json_strict, write_json
@@ -76,7 +76,8 @@ def coverage_of(facts: object) -> dict[str, tuple[int, int]]:
         if dim not in DIMENSIONS or not isinstance(entry, dict):
             continue
         planned, ran = entry.get("planned"), entry.get("run")
-        if all(isinstance(n, int) and not isinstance(n, bool) and n >= 0 for n in (planned, ran)):
+        if isinstance(planned, int) and isinstance(ran, int) and not isinstance(planned, bool) and not isinstance(ran, bool) \
+                and planned >= 0 and ran >= 0:
             out[dim] = (planned, min(ran, planned))
     return out
 
@@ -135,7 +136,7 @@ def compute_scores(run: dict, findings: list[dict], runtime: dict, facts: Mappin
         caps.append(f"agent(s) finished without usable coverage facts: {', '.join(no_facts)}")
 
     confirmed = [f for f in findings if f.get("status") == "confirmed"]
-    dimensions = {}
+    dimensions: dict[str, dict[str, Any]] = {}
     for dim in DIMENSIONS:
         hits = [f for f in confirmed if f.get("dimension") == dim]
         planned = sum(reported.get(a, {}).get(dim, (0, 0))[0] for a in DIMENSION_AGENTS[dim])
@@ -144,7 +145,8 @@ def compute_scores(run: dict, findings: list[dict], runtime: dict, facts: Mappin
         if not fraction and hits:
             fraction = PARTIAL_FLOOR  # something was found, so something was tested, but nothing vouches for how much
         covered = fraction > 0
-        score = max(0, 100 - sum(PENALTY.get(f.get("severity"), 0) for f in hits)) if covered else None
+        penalty = sum(PENALTY.get(str(f.get("severity")), 0) for f in hits)
+        score = max(0, 100 - penalty) if covered else None
         dimensions[dim] = {
             "score": score, "covered": covered, "weight": weights[dim], "coverage": round(fraction, 2),
             "checks": {"planned": planned, "run": ran}, "findings": sorted(f["id"] for f in hits),

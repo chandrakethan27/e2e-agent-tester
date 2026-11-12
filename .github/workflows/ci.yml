@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Tests
+        run: uv run --frozen --project tools pytest tools/tests -q
+      - name: Lint
+        run: uv run --project tools --with ruff ruff check tools
+      - name: Types
+        run: uv run --project tools --with mypy mypy --config-file tools/pyproject.toml tools/src/e2eat
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the live view (npm ci from the lockfile, next build type-checks)
+        run: docker build web

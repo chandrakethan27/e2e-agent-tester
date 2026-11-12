@@ -24,7 +24,7 @@ use-case / anti-use-case recommendations.
 | Sandbox | Local Docker (+ docker compose for dependent services) |
 
 ### Non-goals (v1)
-- No web dashboard, job queue, or multi-user service (possible v2 via Agent SDK).
+- No job queue or multi-user service (possible v2 via Agent SDK). _Revised 2026-11: a read-only live view of a run (`web/`) now ships; see §13._
 - No mobile-app runtime testing (static analysis only).
 - No cloud sandbox; Docker Desktop must be running locally.
 - No automatic fixing of the evaluated repo.
@@ -223,3 +223,22 @@ E2EAgentTester/
 - Gate "not built and run" applies to adopt/audit whenever runtime status is not running (missing file included).
 - A `PreToolUse` guard hook (`e2eat guard`) enforces the host-safety rules for every agent; `.claude/settings.json` also denies reading the secrets file and more host toolchains.
 - Sources that contain (or sit inside) the runs folder are refused.
+
+## 13. Revisions after the hardening review (2026-11)
+A full read of code, prompts and four real runs found that safety, scoring and lifecycle claims held on the happy path only. The hardening pass changed the design as follows; where this section conflicts with earlier ones it wins.
+
+**Safety model.** The guard hook covers Bash and the Read/Write/Edit/Grep/Glob tools and fails closed. Bash is parsed quote-aware (substitutions, subshells, heredocs, `sh -c`, wrappers). Docker is an allowlist: agents may inspect, log, stop/start/kill/exec on `e2eat-<run-id>-*` containers and `docker cp` into them; `run/create/build/compose/volume|network create/prune` are blocked and replaced by `e2eat sandbox build|run` (the k6 load test and the suite-runner fallback use `sandbox run --foreground`). `sandbox run` validates image, name and env keys, allows bind mounts only from `repo/` and `runtime-config/` (read-only) and `blackboard/evidence/` (writable), turns named volumes into per-run labelled volumes, and drops capabilities. The per-run env file lives in `.secrets.d/` outside `runs/`. Generated Dockerfiles and config go to `runtime-config/`, never into the evaluated repo. The guard is defence in depth, not a sandbox.
+
+**Scoring.** Coverage is what agents report as run (`coverage.<dimension>.{planned,run}` in facts, `untested` lists), validated by schema. Weights scale by `run/planned`; an agent that is done without valid facts, failed or unfinished caps the verdict at the second band; a confirmed critical in any weighted dimension gates (licence: adopt only); static-only is a labelled mode. `score` refuses open/disputed findings, duplicate ids, unknown enums and corrupt ledger/runtime files. Rounding is half-up.
+
+**Cross-examination.** Eligibility is critical/high or confidence ≤ 0.6. Rulings only apply to challenged findings. A challenged finding without a ruling blocks `finalize-findings` unless settled explicitly (`--unruled keep|drop`). Eligible findings never challenged are confirmed but flagged unreviewed. Severity and dimension are frozen into the ledger at finalize.
+
+**Orchestration.** A briefing checkpoint (what it is, how it will be tested, what cannot be tested, which keys to share) precedes the build; a not-run checkpoint follows a failed build (continue static-only / retry up to twice / stop). `squad --plan` previews without writing; `static-only`, `reconfigure`, `messages --expire`, `sandbox env --check` and `sandbox stale --except` support those flows. Every agent run, including SendMessage resumes, is recorded; `agent … done` is refused until the agent's output file validates. Unanswered questions expire into coverage gaps. perf-agent's load test moves to an exclusive wave 2; functional-tester restores the app after disruptive checks. A `SessionEnd` hook tears down labelled resources.
+
+**Run bookkeeping.** `run.json` gains `timings` and `finished_at`; `events.jsonl` records every phase/agent transition; writes are atomic and serialized by a run lock; `next-id` reserves numbers.
+
+**Live view.** `web/` (Next.js, Docker, read-only `runs/`) renders state from `run.json`, `events.jsonl`, facts, findings, the ledger and scores; it serves the report and its evidence at `/runs/<id>/…` (allowed prefixes only, sandboxed). It is reused across sessions and optional. The `e2eat web` commands build, start, lock and stop it.
+
+**Report.** Notices for STATIC ONLY / NOT RUN / PARTIAL, gates and caps, a claims ledger (default `untested`), validated top risks, a dropped-findings appendix and the briefing's "could not test" list.
+
+**Not yet done.** The base image and Next.js version are not digest-pinned/upgraded; `RUN_DIR` arguments are not confined to `runs/` by the CLI (the guard, mount allowlist and run-dir validation cover the risky paths); runtime egress is still unfiltered; no live `/evaluate` acceptance of the three fixtures has been run since this pass (the scoring-level expectations are pinned in tests).

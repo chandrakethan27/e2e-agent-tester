@@ -1,3 +1,5 @@
+> **Superseded.** This is the original implementation plan (2026-10-15). It was executed, then changed substantially; the embedded code and prompts below are stale. The current design is the design spec (see §13 for the hardening pass) and the code itself.
+
 # E2E Agent Tester Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

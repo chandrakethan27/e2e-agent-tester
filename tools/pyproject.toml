@@ -20,3 +20,24 @@ packages = ["src/e2eat"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+ignore = [
+    "E501",  # long lines: the prompts' JSON examples and f-strings are clearer unwrapped
+    "B008",  # runner_with_timeout(...) as a default is evaluated once on purpose: it builds a stateless runner
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402", "B011"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/e2eat"]
+ignore_missing_imports = true
+warn_unused_ignores = true

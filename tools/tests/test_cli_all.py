@@ -5,7 +5,7 @@ from e2eat.cli import build_parser
 EXPECTED = {
     "init", "phase", "agent", "validate", "schema", "next-id", "findings", "messages", "set-status",
     "apply-crossexam", "finalize-findings", "status", "squad", "score", "redact", "render", "sandbox", "scan", "doctor", "git", "guard", "web",
-    "reconfigure", "static-only",
+    "reconfigure", "static-only", "runs",
 }
 
 
