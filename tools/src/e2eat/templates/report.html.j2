@@ -37,6 +37,9 @@ pre{background:var(--surface-2);padding:10px 12px;border-radius:8px;overflow-x:a
 .kpi b{display:block;font-size:1.5rem;line-height:1.2;font-variant-numeric:tabular-nums}
 .kpi span{color:var(--muted);font-size:.85rem}
 .gates{grid-column:1/-1;margin:0;padding-left:18px;color:var(--bad)}
+.gates.caps{color:var(--warn)}
+.notice{border-left:6px solid var(--bad)}
+.notice-partial,.notice-static-only{border-left-color:var(--warn)}
 .dims{display:grid;gap:10px}
 .dim{display:grid;grid-template-columns:150px 1fr 56px;gap:12px;align-items:center}
 .track{height:10px;background:var(--bar);border-radius:999px;overflow:hidden}
@@ -48,6 +51,8 @@ ul.clean{margin:0;padding-left:18px}
 details.finding{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--sev-info);border-radius:10px;margin:8px 0;padding:10px 14px}
 details.finding summary{cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
 details.finding summary::-webkit-details-marker{display:none}
+details.finding summary::before{content:"\25B8";color:var(--muted);flex:none}
+details.finding[open] summary::before{content:"\25BE"}
 details.finding[open] summary{margin-bottom:8px}
 .sev{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
 .sev-critical{border-left-color:var(--sev-critical)}.sev-critical .sev{color:var(--sev-critical)}
@@ -63,6 +68,7 @@ table{border-collapse:collapse;width:100%;font-size:.92rem}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
 th{color:var(--muted);font-weight:600}
 footer{margin-top:48px;color:var(--muted);font-size:.85rem}
+@media print{.card,details.finding,tr{break-inside:avoid}}
 @media (max-width:560px){.verdict{grid-template-columns:1fr}.dim{grid-template-columns:110px 1fr 44px}}
 </style>
 </head>
@@ -75,7 +81,7 @@ footer{margin-top:48px;color:var(--muted);font-size:.85rem}
   {% if recon.summary %}<p>{{ recon.summary }}</p>{% endif %}
 </header>
 
-{% if notice %}<section class="card" style="border-left:6px solid var(--bad)"><b>{{ notice.level }} — {{ notice.title }}</b><p>{{ notice.text }}</p></section>
+{% if notice %}<section class="card notice notice-{{ notice.level | lower | replace(" ", "-") }}"><b>{{ notice.level }} — {{ notice.title }}</b><p>{{ notice.text }}</p></section>
 {% endif %}
 <section class="card verdict">
   <span class="badge tone-{{ scores.verdict | tone }}">{{ scores.verdict or "Not scored" }}</span>
@@ -88,6 +94,10 @@ footer{margin-top:48px;color:var(--muted);font-size:.85rem}
   {% if scores.gates %}
   <ul class="gates">{% for gate in scores.gates %}<li>Gate: {{ gate }}</li>{% endfor %}</ul>
   {% endif %}
+  {% if scores.caps %}
+  <ul class="gates caps">{% for cap in scores.caps %}<li>Limited: {{ cap }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if scores.counts and scores.counts.unreviewed %}<p class="meta" style="grid-column:1/-1;margin:0">{{ scores.counts.unreviewed }} confirmed finding(s) were not cross-examined (unreviewed).</p>{% endif %}
 </section>
 
 {% if report.executive_summary %}
@@ -112,17 +122,17 @@ footer{margin-top:48px;color:var(--muted);font-size:.85rem}
 {% endfor %}
 </div>
 
-{% if report.highlights or report.top_risks %}
+{% if report.highlights or top_risks %}
 <div class="grid" style="margin-top:24px">
   {% if report.highlights %}<div class="card"><h3>Strengths</h3><ul class="clean">{% for h in report.highlights %}<li>{{ h }}</li>{% endfor %}</ul></div>{% endif %}
-  {% if report.top_risks %}<div class="card"><h3>Top risks</h3><ul class="clean">{% for fid in report.top_risks %}<li><a href="#{{ fid }}">{{ fid }}</a>{% for f in findings if f.id == fid %} — {{ f.title }}{% endfor %}</li>{% endfor %}</ul></div>{% endif %}
+  {% if top_risks %}<div class="card"><h3>Top risks</h3><ul class="clean">{% for fid in top_risks %}<li><a href="#{{ fid }}">{{ fid }}</a>{% for f in findings if f.id == fid %} — {{ f.title }}{% endfor %}</li>{% endfor %}</ul>{% if top_risks_removed %}<p class="meta">{{ top_risks_removed }} risk(s) named in the summary did not survive cross-examination and are not listed.</p>{% endif %}</div>{% endif %}
 </div>
 {% endif %}
 
 <h2>Findings ({{ findings | length }})</h2>
 {% for f in findings %}
-<details class="finding sev-{{ f.severity }}" id="{{ f.id }}"{% if f.severity in ("critical", "high") %} open{% endif %}>
-  <summary><span class="sev">{{ f.severity }}</span><b>{{ f.title }}</b><span class="fid">{{ f.id }} · {{ f.dimension }} · {{ f.agent }} · confidence {{ "%.0f" | format((f.confidence or 0) * 100) }}%</span></summary>
+<details class="finding sev-{{ f.severity }}" id="{{ f.id }}"{% if f.severity in ("critical", "high", "medium") %} open{% endif %}>
+  <summary><span class="sev">{{ f.severity }}</span><b>{{ f.title }}</b><span class="fid">{{ f.id }} · {{ f.dimension }} · {{ f.agent }} · confidence {{ "%.0f" | format((f.confidence or 0) * 100) }}%{% if f.reviewed is sameas false %} · unreviewed{% endif %}</span></summary>
   <p>{{ f.claim }}</p>
   {% if f.repro %}<p class="meta">Reproduce</p><pre>{{ f.repro }}</pre>{% endif %}
   <div class="evidence"><p class="meta">Evidence</p><ul class="clean">
@@ -173,6 +183,20 @@ footer{margin-top:48px;color:var(--muted);font-size:.85rem}
 <ul class="clean">{% for p in usecases.integration_patterns %}<li>{{ p }}</li>{% endfor %}</ul>
 {% endif %}
 
+{% if claims %}
+<h2>Claims checked ({{ claims | length }})</h2>
+<div class="table-wrap"><table><thead><tr><th>Claim</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+{% for c in claims %}
+<tr><td>{{ c.text }}<br><span class="fid">{{ c.id }}</span></td><td><b>{{ c.result }}</b>{% if c.note %}<br><span class="meta">{{ c.note }}</span>{% endif %}</td>
+<td>{% for ref in c.evidence %}{% set href = ref | evidence_href %}{% if href %}<a href="{{ href }}">{{ ref }}</a>{% else %}<code>{{ ref }}</code>{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>
+{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if journeys %}
+<h3 style="margin-top:16px">User journeys</h3>
+<ul class="clean">{% for j in journeys %}<li><b>{{ j.result or "?" }}</b> — {{ j.title }}{% if j.note %} <span class="meta">({{ j.note }})</span>{% endif %}</li>{% endfor %}</ul>
+{% endif %}
+
 <h2>Coverage</h2>
 <div class="card">
 <p>Runtime: <b>{{ runtime.status or "unknown" }}</b>{% if runtime.strategy_used %} via {{ runtime.strategy_used }}{% endif %}{% if runtime.startup_secs is number %} · started in {{ runtime.startup_secs }}s{% endif %}</p>
@@ -182,9 +206,17 @@ footer{margin-top:48px;color:var(--muted);font-size:.85rem}
 <li><b>{{ agent }}</b>{% if info.note %}: {{ info.note }}{% endif %}</li>
 {% if loop.last %}</ul>{% endif %}
 {% endfor %}
+{% if scores.untested %}<p class="meta">Not tested</p><ul class="clean">{% for u in scores.untested %}<li><b>{{ u.agent }}</b>: {{ u.what }}{% if u.why %} — {{ u.why }}{% endif %}</li>{% endfor %}</ul>{% endif %}
+{% if briefing.cannot_test %}<p class="meta">Could not be tested (from the briefing)</p><ul class="clean">{% for c in briefing.cannot_test %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
+{% if scores.problems %}<p class="meta">Scoring notes</p><ul class="clean">{% for p in scores.problems %}<li>{{ p }}</li>{% endfor %}</ul>{% endif %}
 {% if report.coverage_notes %}<p class="meta">Not covered</p><ul class="clean">{% for n in report.coverage_notes %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
 {% if run.notes %}<p class="meta">Notes</p><ul class="clean">{% for n in run.notes %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
 </div>
+
+{% if dropped %}
+<h2>Dropped in cross-examination ({{ dropped | length }})</h2>
+<ul class="clean">{% for f in dropped %}<li><b>{{ f.title }}</b> <span class="fid">{{ f.id }}</span>{% if f.ruling_reason %} — {{ f.ruling_reason }}{% endif %}</li>{% endfor %}</ul>
+{% endif %}
 
 {% if report.next_steps %}
 <h2>Next steps</h2>

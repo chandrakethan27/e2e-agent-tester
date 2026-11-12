@@ -9,7 +9,7 @@ from urllib.parse import quote
 from jinja2 import ChainableUndefined, Environment, PackageLoader
 
 from .blackboard import load_findings, severity_rank
-from .jsonio import read_json, read_json_or
+from .jsonio import read_json, read_json_or, read_json_strict
 from .score import DIMENSIONS
 from .validate import LINE_SUFFIX, evidence_problem
 
@@ -29,8 +29,12 @@ def verdict_tone(verdict: object) -> str:
     return VERDICT_TONE.get(str(verdict or "").split(" (")[0], "neutral")
 
 
-def testing_notice(run: dict, runtime: dict) -> dict | None:
+def testing_notice(run: dict, runtime: dict, scores: dict | None = None) -> dict | None:
     """Tell the reader when the verdict rests on less than a full run of the project."""
+    if runtime.get("status") == "static-only":
+        return {"level": "STATIC ONLY", "title": "Static review chosen: the project was not run",
+                "text": "At your request nothing was executed. This verdict comes from reading the code, dependencies, configuration and "
+                        "repository health; behaviour, performance and reliability are unverified."}
     if runtime.get("status") != "running":
         return {"level": "NOT RUN", "title": "The project was NOT run",
                 "text": "This verdict comes from static review only (code, dependencies, configuration, repository health). "
@@ -40,7 +44,25 @@ def testing_notice(run: dict, runtime: dict) -> dict | None:
         return {"level": "PARTIAL", "title": "Some checks did not complete",
                 "text": "The project ran, but these agents failed, so their areas are untested: "
                         + "; ".join(f"{name} ({note})" for name, note in sorted(failed.items())) + "."}
+    caps = (scores or {}).get("caps") or []
+    if caps:
+        return {"level": "PARTIAL", "title": "Some checks did not complete",
+                "text": "The project ran, but the verdict is limited: " + "; ".join(str(c) for c in caps) + "."}
     return None
+
+
+def _claims_ledger(recon: dict, facts: object) -> list[dict]:
+    """Every claim the README makes with its result: pass, fail or untested (the default, never an implied pass)."""
+    results = {c.get("claim_id"): c for c in (facts.get("claims") if isinstance(facts, dict) else None) or [] if isinstance(c, dict)}
+    ledger = []
+    for claim in recon.get("claims") or []:
+        if not isinstance(claim, dict) or "id" not in claim:
+            continue
+        found = results.get(claim["id"], {})
+        evidence = [e for e in found.get("evidence") or [] if isinstance(e, str)]
+        ledger.append({"id": claim["id"], "text": claim.get("text", ""), "result": str(found.get("result", "untested")),
+                       "note": found.get("note", ""), "evidence": evidence})
+    return ledger
 
 
 def gather(run_dir: Path, now: datetime | None = None) -> dict:
@@ -49,17 +71,31 @@ def gather(run_dir: Path, now: datetime | None = None) -> dict:
     findings = load_findings(run_dir)
     confirmed = sorted((f for f in findings if f.get("status") == "confirmed"), key=lambda f: (severity_rank(f), f["id"]))
     run = read_json(run_dir / "run.json")
-    runtime = read_json_or(facts / "runtime.json", {})
+    # A missing file renders as an empty section; a malformed one is an error the reader must hear about, not a blank.
+    runtime = read_json_strict(facts / "runtime.json", {}, dict)
+    recon = read_json_strict(facts / "recon.json", {}, dict)
+    scores = read_json_strict(run_dir / "scores.json", {}, dict)
+    report = read_json_strict(run_dir / "report.json", {}, dict)
+    functional = read_json_or(facts / "functional-tester.json", {})
+    ids = {f["id"] for f in confirmed}
+    listed = [i for i in report.get("top_risks") or [] if isinstance(i, str)]
+    dropped = [f for f in findings if f.get("status") == "dropped"]
     return {
-        "notice": testing_notice(run, runtime),
+        "notice": testing_notice(run, runtime, scores),
         "run": run,
-        "recon": read_json_or(facts / "recon.json", {}),
+        "recon": recon,
         "runtime": runtime,
-        "scores": read_json_or(run_dir / "scores.json", {}),
-        "usecases": read_json_or(run_dir / "usecases.json", {}),
-        "report": read_json_or(run_dir / "report.json", {}),
+        "scores": scores,
+        "usecases": read_json_strict(run_dir / "usecases.json", {}, dict),
+        "report": report,
+        "briefing": read_json_strict(facts / "briefing.json", {}, dict),
+        "claims": _claims_ledger(recon, functional),
+        "journeys": [j for j in (functional.get("journeys") if isinstance(functional, dict) else None) or [] if isinstance(j, dict)],
+        "top_risks": [i for i in listed if i in ids],
+        "top_risks_removed": sum(1 for i in listed if i not in ids),
         "findings": confirmed,
-        "dropped_count": sum(1 for f in findings if f.get("status") == "dropped"),
+        "dropped": dropped,
+        "dropped_count": len(dropped),
         "dimensions": DIMENSIONS,
         "generated_at": (now or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC"),
     }

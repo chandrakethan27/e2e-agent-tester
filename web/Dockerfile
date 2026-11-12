@@ -1,10 +1,18 @@
-FROM node:22-alpine
+# Stage 1: install from the lockfile (npm ci) and build; dev dependencies never reach the final image.
+FROM node:22-alpine AS build
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production
-COPY package.json ./
-RUN npm install --include=dev --no-audit --no-fund
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
+
+# Stage 2: the standalone server only, running as the unprivileged node user.
+FROM node:22-alpine
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production HOSTNAME=0.0.0.0 PORT=3000
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
 USER node
 EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["node", "server.js"]

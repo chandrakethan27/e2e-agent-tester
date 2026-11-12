@@ -10,6 +10,12 @@
 {% for gate in scores.gates %}
 - Gate: {{ gate }}
 {% endfor %}
+{% for cap in scores.caps %}
+- Limited: {{ cap }}
+{% endfor %}
+{% if scores.counts and scores.counts.unreviewed %}
+- {{ scores.counts.unreviewed }} confirmed finding(s) were not cross-examined (unreviewed).
+{% endif %}
 
 {% if report.executive_summary %}
 ## Executive summary
@@ -46,6 +52,32 @@ Evidence: {% for ref in f.evidence %}`{{ ref }}`{% if not loop.last %}, {% endif
 No confirmed findings.
 
 {% endfor %}
+{% if claims %}
+## Claims checked
+
+| Claim | Result |
+|---|---|
+{% for c in claims %}
+| {{ c.text }} ({{ c.id }}) | {{ c.result }} |
+{% endfor %}
+
+{% endif %}
+{% if scores.untested %}
+## Not tested
+
+{% for u in scores.untested %}
+- {{ u.agent }}: {{ u.what }}{% if u.why %} — {{ u.why }}{% endif %}
+
+{% endfor %}
+{% endif %}
+{% if dropped %}
+## Dropped in cross-examination
+
+{% for f in dropped %}
+- {{ f.title }} ({{ f.id }}){% if f.ruling_reason %} — {{ f.ruling_reason }}{% endif %}
+
+{% endfor %}
+{% endif %}
 {% if usecases.use_cases %}
 ## Where this fits
 
